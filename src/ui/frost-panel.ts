@@ -38,12 +38,29 @@ function callout(type: 'warn' | 'safe' | 'info' | 'danger', icon: string, text: 
   return el;
 }
 
+function inlineErr(msg: string): HTMLElement {
+  return callout('warn', '✗', msg);
+}
+
+function lockStep(step: HTMLElement) {
+  step.style.opacity = '0.4';
+  step.style.pointerEvents = 'none';
+  step.setAttribute('aria-disabled', 'true');
+}
+
+function unlockStep(step: HTMLElement) {
+  step.style.opacity = '1';
+  step.style.pointerEvents = '';
+  step.removeAttribute('aria-disabled');
+}
+
 export function renderFrostPanel(): HTMLElement {
   // ── State ─────────────────────────────────────────────────────────────────
   let dealer: DealerResult | null = null;
   let noncesMap = new Map<number, Nonces>();
   let commitmentsMap = new Map<number, Commitment>();
   let selectedSigners = new Set<number>();
+  const participantCardEls = new Map<number, HTMLElement>();
 
   const badge = createKeyBadge('safe');
 
@@ -97,6 +114,10 @@ export function renderFrostPanel(): HTMLElement {
   distributeBtn.textContent = 'Distribute Key';
   step1.appendChild(distributeBtn);
 
+  const distributeErr = document.createElement('div');
+  distributeErr.style.display = 'none';
+  step1.appendChild(distributeErr);
+
   const dealerNote = document.createElement('p');
   dealerNote.className = 'text-xs text-muted mt-sm';
   dealerNote.textContent = 'Simplified: a trusted dealer generates key shares. Production FROST uses Distributed Key Generation (DKG) to remove this trust assumption.';
@@ -115,8 +136,7 @@ export function renderFrostPanel(): HTMLElement {
   // ── Step 2: Round 1 commitments ──────────────────────────────────────────
   const step2 = document.createElement('div');
   step2.className = 'step';
-  step2.style.opacity = '0.4';
-  step2.style.pointerEvents = 'none';
+  lockStep(step2);
 
   step2.appendChild(Object.assign(document.createElement('div'), { className: 'step-label', textContent: 'Step 2 — Round 1' }));
   step2.appendChild(Object.assign(document.createElement('div'), { className: 'step-title', textContent: 'Generate commitments' }));
@@ -138,14 +158,13 @@ export function renderFrostPanel(): HTMLElement {
   // ── Step 3: Round 2 signing ──────────────────────────────────────────────
   const step3 = document.createElement('div');
   step3.className = 'step';
-  step3.style.opacity = '0.4';
-  step3.style.pointerEvents = 'none';
+  lockStep(step3);
 
   step3.appendChild(Object.assign(document.createElement('div'), { className: 'step-label', textContent: 'Step 3 — Round 2' }));
   step3.appendChild(Object.assign(document.createElement('div'), { className: 'step-title', textContent: 'Collaborative signing' }));
   step3.appendChild(Object.assign(document.createElement('p'), {
     className: 'text-muted text-xs mb-sm',
-    textContent: 'Select exactly k participants. Each produces a partial signature using only their own share.',
+    textContent: 'Select at least k participants. Each produces a partial signature using only their own share.',
   }));
 
   const signerGrid = document.createElement('div');
@@ -171,6 +190,10 @@ export function renderFrostPanel(): HTMLElement {
   signBtn.disabled = true;
   step3.appendChild(signBtn);
 
+  const signErr = document.createElement('div');
+  signErr.style.display = 'none';
+  step3.appendChild(signErr);
+
   const signResult = document.createElement('div');
   step3.appendChild(signResult);
 
@@ -183,12 +206,13 @@ export function renderFrostPanel(): HTMLElement {
   function updateSignBtn() {
     const k = getK();
     signBtn.disabled = selectedSigners.size < k;
-    signBtn.title = selectedSigners.size < k ? `Select exactly ${k} participants` : '';
+    signBtn.title = selectedSigners.size < k ? `Select at least ${k} participants to sign` : '';
   }
 
   function buildSignerGrid() {
     if (!dealer) return;
     signerGrid.innerHTML = '';
+    selectedSigners.clear();
     for (const p of dealer.participants) {
       const pc = makeParticipantCard(p.index, 'signing');
       const toggle = () => {
@@ -214,24 +238,35 @@ export function renderFrostPanel(): HTMLElement {
   distributeBtn.addEventListener('click', () => {
     const n = getN();
     const k = getK();
-    if (k > n) { alert('Threshold k cannot exceed n'); return; }
+    distributeErr.style.display = 'none';
+    if (k > n) {
+      distributeErr.innerHTML = '';
+      distributeErr.appendChild(inlineErr('Threshold k cannot exceed n'));
+      distributeErr.style.display = '';
+      return;
+    }
 
     try {
       dealer = dealerKeyGen(n, k);
     } catch (e) {
-      alert(String(e));
+      distributeErr.innerHTML = '';
+      distributeErr.appendChild(inlineErr(String(e)));
+      distributeErr.style.display = '';
       return;
     }
 
     noncesMap.clear();
     commitmentsMap.clear();
     selectedSigners.clear();
+    participantCardEls.clear();
 
     // Render participant cards
     participantGrid.innerHTML = '';
     participantGrid.style.display = 'grid';
     for (const p of dealer.participants) {
-      participantGrid.appendChild(makeParticipantCard(p.index, 'distributed'));
+      const pc = makeParticipantCard(p.index, 'distributed');
+      participantCardEls.set(p.index, pc);
+      participantGrid.appendChild(pc);
     }
 
     distributeResult.innerHTML = '';
@@ -247,13 +282,12 @@ export function renderFrostPanel(): HTMLElement {
     pubKeyRow.appendChild(monoBox(hexOf(dealer.groupPublicKey)));
     distributeResult.appendChild(pubKeyRow);
 
-    // Enable step 2
-    step2.style.opacity = '1';
-    step2.style.pointerEvents = '';
+    // Enable step 2, reset downstream
+    unlockStep(step2);
     commitResult.innerHTML = '';
-    step3.style.opacity = '0.4';
-    step3.style.pointerEvents = 'none';
+    lockStep(step3);
     signResult.innerHTML = '';
+    signErr.style.display = 'none';
   });
 
   // ── Commit handler ────────────────────────────────────────────────────────
@@ -268,90 +302,113 @@ export function renderFrostPanel(): HTMLElement {
       commitmentsMap.set(p.index, commitment);
     }
 
+    // Update participant cards to show committed state
+    for (const pc of participantCardEls.values()) {
+      pc.classList.add('committed');
+      const sub = pc.querySelector('.participant-sublabel');
+      if (sub) sub.textContent = '✓ committed';
+    }
+
     commitResult.innerHTML = '';
     commitResult.appendChild(callout('safe', '✓',
       `${dealer.n} participants generated nonce pairs. Only the commitment values (D_i, E_i) are public — the nonces themselves are secret.`));
 
-    // Show a sample commitment
     const firstC = commitmentsMap.get(1)!;
     const row = document.createElement('div');
     row.className = 'col mt-sm';
     row.appendChild(Object.assign(document.createElement('span'), {
       className: 'text-muted text-xs',
-      textContent: `Participant 1 commitment D (hiding):`,
+      textContent: 'Participant 1 commitment D (hiding nonce):',
     }));
     row.appendChild(monoBox(hexOf(firstC.D)));
     commitResult.appendChild(row);
 
-    // Build signer grid for step 3
     buildSignerGrid();
 
-    step3.style.opacity = '1';
-    step3.style.pointerEvents = '';
+    unlockStep(step3);
     signResult.innerHTML = '';
+    signErr.style.display = 'none';
   });
 
   // ── Sign handler ──────────────────────────────────────────────────────────
   signBtn.addEventListener('click', () => {
     if (!dealer) return;
 
-    const msg = msgInput.value;
-    if (!msg) { alert('Message cannot be empty'); return; }
+    const msg = msgInput.value.trim();
+    signErr.style.display = 'none';
+    if (!msg) {
+      signErr.innerHTML = '';
+      signErr.appendChild(inlineErr('Message cannot be empty'));
+      signErr.style.display = '';
+      return;
+    }
     const msgBytes = te.encode(msg);
 
     const k = getK();
-    if (selectedSigners.size < k) { alert(`Select at least ${k} participants`); return; }
+    if (selectedSigners.size < k) {
+      signErr.innerHTML = '';
+      signErr.appendChild(inlineErr(`Select at least ${k} participants to sign`));
+      signErr.style.display = '';
+      return;
+    }
 
     const signingIndices = [...selectedSigners].map(BigInt);
     const signingCommitments: Commitment[] = [];
     for (const idx of selectedSigners) {
       const c = commitmentsMap.get(idx);
-      if (!c) { alert(`Commitment missing for participant ${idx} — run Round 1 first`); return; }
+      if (!c) {
+        signErr.innerHTML = '';
+        signErr.appendChild(inlineErr(`Commitment missing for participant ${idx} — run Round 1 first`));
+        signErr.style.display = '';
+        return;
+      }
       signingCommitments.push(c);
     }
 
-    const partialSigs: PartialSig[] = [];
-    for (const idx of selectedSigners) {
-      const p = dealer.participants.find(x => x.index === idx)!;
-      const nonces = noncesMap.get(idx)!;
-      const commitment = commitmentsMap.get(idx)!;
+    try {
+      const partialSigs: PartialSig[] = [];
+      for (const idx of selectedSigners) {
+        const p = dealer.participants.find(x => x.index === idx)!;
+        partialSigs.push(partialSign({
+          participantIndex: idx,
+          secretShare: p.secretShare,
+          nonces: noncesMap.get(idx)!,
+          commitment: commitmentsMap.get(idx)!,
+          signingCommitments,
+          groupPublicKey: dealer.groupPublicKey,
+          message: msgBytes,
+          signingIndices,
+        }));
+      }
 
-      partialSigs.push(partialSign({
-        participantIndex: idx,
-        secretShare: p.secretShare,
-        nonces,
-        commitment,
-        signingCommitments,
-        groupPublicKey: dealer.groupPublicKey,
-        message: msgBytes,
-        signingIndices,
-      }));
-    }
+      const aggSig = aggregate(partialSigs, signingCommitments, dealer.groupPublicKey, msgBytes);
+      const valid = verifySignature(aggSig, dealer.groupPublicKey, msgBytes);
 
-    const aggSig = aggregate(partialSigs, signingCommitments, dealer.groupPublicKey, msgBytes);
-    const valid = verifySignature(aggSig, dealer.groupPublicKey, msgBytes);
+      signResult.innerHTML = '';
 
-    signResult.innerHTML = '';
+      if (valid) {
+        signResult.appendChild(callout('safe', '✓',
+          `Signature valid. ${selectedSigners.size} of ${dealer.n} participants signed without ever assembling the private key. The group public key verifies the result.`));
 
-    if (valid) {
-      signResult.appendChild(callout('safe', '✓',
-        `Signature valid. ${selectedSigners.size} of ${dealer.n} participants signed without ever assembling the private key. The group public key verifies the result.`));
-
-      const col = document.createElement('div');
-      col.className = 'col mt-sm';
-      col.appendChild(Object.assign(document.createElement('span'), {
-        className: 'text-muted text-xs',
-        textContent: 'Ed25519 signature (R || z, 64 bytes):',
-      }));
-      col.appendChild(monoBox(hexOf(aggSig.signature)));
-      col.appendChild(Object.assign(document.createElement('p'), {
-        className: 'text-xs text-muted mt-sm',
-        textContent: 'This is a standard Ed25519 signature. Verified using @noble/curves — the same math as WebCrypto SubtleCrypto.',
-      }));
-      signResult.appendChild(col);
-    } else {
-      signResult.appendChild(callout('danger', '✗',
-        'Signature invalid. This should not occur with correct inputs — check the browser console.'));
+        const col = document.createElement('div');
+        col.className = 'col mt-sm';
+        col.appendChild(Object.assign(document.createElement('span'), {
+          className: 'text-muted text-xs',
+          textContent: 'Ed25519 signature (R || z, 64 bytes):',
+        }));
+        col.appendChild(monoBox(hexOf(aggSig.signature)));
+        col.appendChild(Object.assign(document.createElement('p'), {
+          className: 'text-xs text-muted mt-sm',
+          textContent: 'This is a standard Ed25519 signature. Verified using @noble/curves — the same math as WebCrypto SubtleCrypto.',
+        }));
+        signResult.appendChild(col);
+      } else {
+        signResult.appendChild(callout('danger', '✗',
+          'Signature invalid. This should not occur with correct inputs — check the browser console.'));
+      }
+    } catch (e) {
+      signResult.innerHTML = '';
+      signResult.appendChild(callout('danger', '✗', `Signing error: ${e}`));
     }
   });
 
@@ -360,7 +417,7 @@ export function renderFrostPanel(): HTMLElement {
 
 function makeParticipantCard(index: number, mode: 'distributed' | 'signing'): HTMLElement {
   const card = document.createElement('div');
-  card.className = `participant-card ${mode === 'signing' ? '' : ''}`;
+  card.className = `participant-card${mode === 'distributed' ? ' distributed' : ''}`;
   card.setAttribute('tabindex', '0');
   if (mode === 'signing') {
     card.setAttribute('role', 'checkbox');

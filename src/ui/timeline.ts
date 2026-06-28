@@ -1,10 +1,10 @@
 // Key-exposure timeline — shows when the private key exists in memory for each protocol.
 
 export function renderTimeline(): HTMLElement {
-  const section = document.createElement('div');
+  const section = document.createElement('section');
   section.className = 'section';
 
-  const title = document.createElement('h3');
+  const title = document.createElement('h2');
   title.className = 'section-title';
   title.textContent = 'Key Exposure Timeline';
 

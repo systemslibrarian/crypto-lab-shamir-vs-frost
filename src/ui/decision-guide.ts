@@ -41,7 +41,7 @@ export function renderDecisionGuide(): HTMLElement {
     'Sharing a private key is categorically different from threshold signing',
   ]));
 
-  grid.appendChild(makeCard('dc-safe', '⚠ Pitfalls of FROST', [
+  grid.appendChild(makeCard('dc-warn', '⚠ Pitfalls of FROST', [
     'Two network rounds required — latency-sensitive use cases may prefer alternatives',
     'Trusted dealer required for basic setups (use DKG to eliminate this)',
     'Implementation complexity: binding factors, Lagrange coefficients, aggregation',
@@ -64,7 +64,9 @@ export function renderDecisionGuide(): HTMLElement {
     const a = document.createElement('a');
     a.href = href;
     a.textContent = text;
-    a.style.cssText = 'font-size:0.85rem; color:var(--accent); text-decoration:none; border:1px solid var(--border); padding:0.35rem 0.75rem; border-radius:var(--radius-sm);';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.className = 'btn btn-ghost';
     linkRow.appendChild(a);
   }
 

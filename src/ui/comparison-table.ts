@@ -64,7 +64,7 @@ export function renderComparisonTable(): HTMLElement {
         <tbody>
           ${ROWS.map(r => `
           <tr>
-            <td title="${escHtml(r.tip)}">${escHtml(r.label)}</td>
+            <th scope="row">${escHtml(r.label)}</th>
             <td>${escHtml(r.shamir)}</td>
             <td>${escHtml(r.frost)}</td>
           </tr>`).join('')}
