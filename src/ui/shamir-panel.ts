@@ -3,7 +3,7 @@
 
 import { split, reconstruct } from '../shamir/shamir.js';
 import type { Share } from '../shamir/types.js';
-import { createKeyBadge } from './key-indicator.js';
+import { createKeyBadge, type KeyState, type PanelHandle } from './key-indicator.js';
 import { renderPolyViz } from './poly-viz.js';
 
 const te = new TextEncoder();
@@ -31,20 +31,26 @@ function monoBox(text: string): HTMLElement {
   return wrap;
 }
 
-function callout(type: 'warn' | 'safe' | 'info', icon: string, text: string): HTMLElement {
+function callout(type: 'warn' | 'safe' | 'info' | 'danger', icon: string, text: string): HTMLElement {
   const el = document.createElement('div');
   el.className = `callout callout-${type} fade-in`;
   el.innerHTML = `<span class="callout-icon">${icon}</span><span>${text}</span>`;
   return el;
 }
 
-export function renderShamirPanel(): HTMLElement {
+export function renderShamirPanel(): PanelHandle {
   // ── State ─────────────────────────────────────────────────────────────────
   let shares: Share[] = [];
   let selectedIndices = new Set<number>();
   let reconstructedSecret: Uint8Array | null = null;
 
   const badge = createKeyBadge('neutral');
+  const stateListeners: Array<(s: KeyState) => void> = [];
+  // Single chokepoint for badge changes so the verdict strip stays in sync.
+  function setBadge(s: KeyState) {
+    badge.setState(s);
+    stateListeners.forEach(f => f(s));
+  }
 
   // ── Root card ────────────────────────────────────────────────────────────
   const card = document.createElement('div');
@@ -220,6 +226,14 @@ export function renderShamirPanel(): HTMLElement {
   step3.appendChild(signResultS);
   card.appendChild(step3);
 
+  // ── Attacker overlay (driven from the page-level "Compromise" control) ─────
+  const attackResult = document.createElement('div');
+  attackResult.style.display = 'none';
+  attackResult.style.marginTop = '1rem';
+  attackResult.setAttribute('role', 'status');
+  attackResult.setAttribute('aria-live', 'polite');
+  card.appendChild(attackResult);
+
   // ── Validation helpers ───────────────────────────────────────────────────
   function validateNK(): { n: number; k: number; valid: boolean } {
     const n = Math.min(10, Math.max(2, parseInt(nInput.value) || 5));
@@ -260,7 +274,9 @@ export function renderShamirPanel(): HTMLElement {
     reconstructedSecret = null;
     reconstructResult.innerHTML = '';
     signResultS.innerHTML = '';
-    badge.setState('neutral');
+    attackResult.innerHTML = '';
+    attackResult.style.display = 'none';
+    setBadge('neutral');
 
     // Render share cards
     shareGrid.innerHTML = '';
@@ -342,7 +358,7 @@ export function renderShamirPanel(): HTMLElement {
     }
 
     // 🔴 KEY IS NOW IN MEMORY
-    badge.setState('warn');
+    setBadge('warn');
 
     reconstructResult.innerHTML = '';
 
@@ -420,5 +436,58 @@ export function renderShamirPanel(): HTMLElement {
     }
   });
 
-  return card;
+  // ── Panel control API (used by the page for Run-both / Reset / Compromise) ──
+  function reset() {
+    shares = [];
+    selectedIndices.clear();
+    reconstructedSecret = null;
+    shareGrid.innerHTML = '';
+    shareGrid.style.display = 'none';
+    vizContainer.innerHTML = '';
+    vizContainer.style.display = 'none';
+    reconstructResult.innerHTML = '';
+    signResultS.innerHTML = '';
+    attackResult.innerHTML = '';
+    attackResult.style.display = 'none';
+    kWarnEl.style.display = 'none';
+    reconstructBtn.disabled = true;
+    step2.style.opacity = '0.4';
+    step2.style.pointerEvents = 'none';
+    step3.style.opacity = '0.4';
+    step3.style.pointerEvents = 'none';
+    setBadge('neutral');
+  }
+
+  async function runAll() {
+    reset();
+    splitBtn.click();
+    const k = Math.min(10, Math.max(2, parseInt(kInput.value) || 3));
+    const cards = Array.from(shareGrid.children) as HTMLElement[];
+    for (let i = 0; i < k && i < cards.length; i++) cards[i].click();
+    reconstructBtn.click();
+    await new Promise(r => setTimeout(r, 150));
+    signBtnS.click();
+  }
+
+  function attack() {
+    attackResult.style.display = 'block';
+    attackResult.innerHTML = '';
+    if (reconstructedSecret) {
+      attackResult.appendChild(callout('danger', '😈',
+        `Attacker compromised this machine while the key sat in memory and exfiltrated the FULL secret: ` +
+        `"${td.decode(reconstructedSecret)}". They can now forge any signature, forever. Game over.`));
+    } else {
+      attackResult.appendChild(callout('info', '😈',
+        'Attacker compromised this machine, but the secret has not been reconstructed yet. ' +
+        'Run the protocol to the reconstruction step to see exactly what leaks at that moment.'));
+    }
+  }
+
+  return {
+    el: card,
+    runAll,
+    reset,
+    attack,
+    onStateChange: cb => { stateListeners.push(cb); cb('neutral'); },
+  };
 }

@@ -7,7 +7,7 @@ import { partialSign } from '../frost/round2.js';
 import { aggregate } from '../frost/aggregate.js';
 import { verifySignature } from '../frost/verify.js';
 import type { DealerResult, Nonces, Commitment, PartialSig } from '../frost/types.js';
-import { createKeyBadge } from './key-indicator.js';
+import { createKeyBadge, type KeyState, type PanelHandle } from './key-indicator.js';
 
 const te = new TextEncoder();
 
@@ -54,7 +54,7 @@ function unlockStep(step: HTMLElement) {
   step.removeAttribute('aria-disabled');
 }
 
-export function renderFrostPanel(): HTMLElement {
+export function renderFrostPanel(): PanelHandle {
   // ── State ─────────────────────────────────────────────────────────────────
   let dealer: DealerResult | null = null;
   let noncesMap = new Map<number, Nonces>();
@@ -63,6 +63,10 @@ export function renderFrostPanel(): HTMLElement {
   const participantCardEls = new Map<number, HTMLElement>();
 
   const badge = createKeyBadge('safe');
+  // FROST never reconstructs the key, so the state stays 'safe' throughout —
+  // but we still notify listeners so the verdict strip mirrors it on reset.
+  const stateListeners: Array<(s: KeyState) => void> = [];
+  function notify(s: KeyState) { stateListeners.forEach(f => f(s)); }
 
   // ── Root card ────────────────────────────────────────────────────────────
   const card = document.createElement('div');
@@ -198,6 +202,14 @@ export function renderFrostPanel(): HTMLElement {
   step3.appendChild(signResult);
 
   card.appendChild(step3);
+
+  // ── Attacker overlay (driven from the page-level "Compromise" control) ─────
+  const attackResult = document.createElement('div');
+  attackResult.style.display = 'none';
+  attackResult.style.marginTop = '1rem';
+  attackResult.setAttribute('role', 'status');
+  attackResult.setAttribute('aria-live', 'polite');
+  card.appendChild(attackResult);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function getK(): number { return Math.min(10, Math.max(2, parseInt(kInput.value) || 3)); }
@@ -412,7 +424,65 @@ export function renderFrostPanel(): HTMLElement {
     }
   });
 
-  return card;
+  // ── Panel control API (used by the page for Run-both / Reset / Compromise) ──
+  function reset() {
+    dealer = null;
+    noncesMap.clear();
+    commitmentsMap.clear();
+    selectedSigners.clear();
+    participantCardEls.clear();
+    participantGrid.innerHTML = '';
+    participantGrid.style.display = 'none';
+    distributeResult.innerHTML = '';
+    distributeErr.style.display = 'none';
+    commitResult.innerHTML = '';
+    signerGrid.innerHTML = '';
+    signResult.innerHTML = '';
+    signErr.style.display = 'none';
+    attackResult.innerHTML = '';
+    attackResult.style.display = 'none';
+    signBtn.disabled = true;
+    lockStep(step2);
+    lockStep(step3);
+    badge.setState('safe');
+    notify('safe');
+  }
+
+  async function runAll() {
+    reset();
+    distributeBtn.click();
+    commitBtn.click();
+    const k = getK();
+    const cards = Array.from(signerGrid.children) as HTMLElement[];
+    for (let i = 0; i < k && i < cards.length; i++) cards[i].click();
+    await new Promise(r => setTimeout(r, 150));
+    signBtn.click();
+  }
+
+  function attack() {
+    attackResult.style.display = 'block';
+    attackResult.innerHTML = '';
+    if (dealer) {
+      const victim = dealer.participants[0];
+      const pc = participantCardEls.get(victim.index);
+      if (pc) pc.classList.add('compromised');
+      attackResult.appendChild(callout('safe', '🛡️',
+        `Attacker compromised participant P${victim.index} and stole their entire share. ` +
+        `It signs nothing on its own — FROST needs k cooperating shares and the private key is never assembled ` +
+        `on any machine. The attacker is stuck.`));
+    } else {
+      attackResult.appendChild(callout('info', '😈',
+        'Attacker compromised a participant, but no key has been distributed yet. Run the protocol first.'));
+    }
+  }
+
+  return {
+    el: card,
+    runAll,
+    reset,
+    attack,
+    onStateChange: cb => { stateListeners.push(cb); cb('safe'); },
+  };
 }
 
 function makeParticipantCard(index: number, mode: 'distributed' | 'signing'): HTMLElement {

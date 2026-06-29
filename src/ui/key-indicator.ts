@@ -8,6 +8,17 @@ export interface KeyBadgeHandle {
   setState(state: KeyState): void;
 }
 
+// Control surface each interactive panel exposes so the page can drive both
+// protocols in lockstep, reset them, run the attacker overlay, and mirror the
+// live key-in-memory state into the verdict strip.
+export interface PanelHandle {
+  el: HTMLElement;
+  runAll: () => Promise<void>;
+  reset: () => void;
+  attack: () => void;
+  onStateChange: (cb: (state: KeyState) => void) => void;
+}
+
 export function createKeyBadge(initialState: KeyState = 'neutral'): KeyBadgeHandle {
   const el = document.createElement('span');
   el.className = 'key-badge';

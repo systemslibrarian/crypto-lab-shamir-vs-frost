@@ -120,6 +120,53 @@ body {
   .two-panel { grid-template-columns: 1fr; }
 }
 
+/* ── Head-to-head controls ── */
+.h2h-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+/* ── Live verdict strip ── */
+.verdict-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+  margin-top: var(--gap);
+}
+@media (max-width: 640px) { .verdict-strip { grid-template-columns: 1fr; } }
+
+.verdict-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
+}
+.verdict-cell.vc-warn {
+  background: var(--key-in-memory-bg);
+  border-color: var(--key-in-memory);
+  color: var(--key-in-memory);
+}
+.verdict-cell.vc-safe {
+  background: var(--key-safe-bg);
+  border-color: var(--key-safe);
+  color: var(--key-safe);
+}
+.verdict-name {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.verdict-answer { font-size: 0.85rem; color: var(--text); }
+.verdict-cell.vc-warn .verdict-answer strong { color: var(--key-in-memory); }
+.verdict-cell.vc-safe .verdict-answer strong { color: var(--key-safe); }
+
 /* ── Key-in-memory badge ── */
 .key-badge {
   display: inline-flex;
