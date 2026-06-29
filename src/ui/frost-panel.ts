@@ -199,6 +199,8 @@ export function renderFrostPanel(): PanelHandle {
   step3.appendChild(signErr);
 
   const signResult = document.createElement('div');
+  signResult.setAttribute('role', 'status');
+  signResult.setAttribute('aria-live', 'polite');
   step3.appendChild(signResult);
 
   card.appendChild(step3);
@@ -455,8 +457,7 @@ export function renderFrostPanel(): PanelHandle {
     const k = getK();
     const cards = Array.from(signerGrid.children) as HTMLElement[];
     for (let i = 0; i < k && i < cards.length; i++) cards[i].click();
-    await new Promise(r => setTimeout(r, 150));
-    signBtn.click();
+    signBtn.click(); // FROST signing is synchronous — no await needed
   }
 
   function attack() {

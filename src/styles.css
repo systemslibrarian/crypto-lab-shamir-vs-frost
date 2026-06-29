@@ -157,15 +157,18 @@ body {
   border-color: var(--key-safe);
   color: var(--key-safe);
 }
+/* Text stays --text (>= 4.5:1 on both themes); the colored border + tinted
+   background carry the at-a-glance red/green cue, and the literal YES/NO words
+   mean color is never the sole signal (WCAG 1.4.1 / 1.4.3). */
 .verdict-name {
   font-size: 0.72rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  color: var(--text);
 }
 .verdict-answer { font-size: 0.85rem; color: var(--text); }
-.verdict-cell.vc-warn .verdict-answer strong { color: var(--key-in-memory); }
-.verdict-cell.vc-safe .verdict-answer strong { color: var(--key-safe); }
+.verdict-answer strong { color: var(--text); }
 
 /* ── Key-in-memory badge ── */
 .key-badge {

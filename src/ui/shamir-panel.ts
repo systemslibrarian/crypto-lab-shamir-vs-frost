@@ -43,6 +43,10 @@ export function renderShamirPanel(): PanelHandle {
   let shares: Share[] = [];
   let selectedIndices = new Set<number>();
   let reconstructedSecret: Uint8Array | null = null;
+  // Threshold the current shares were actually split with. Reconstruction must
+  // match this — not whatever the k input reads now — since the user can edit
+  // the input after splitting (and validateNK clamps k to n at split time).
+  let activeK = 0;
 
   const badge = createKeyBadge('neutral');
   const stateListeners: Array<(s: KeyState) => void> = [];
@@ -179,6 +183,8 @@ export function renderShamirPanel(): PanelHandle {
   reconstructBtn.disabled = true;
 
   const reconstructResult = document.createElement('div');
+  reconstructResult.setAttribute('role', 'status');
+  reconstructResult.setAttribute('aria-live', 'polite');
 
   step2.appendChild(step2Label);
   step2.appendChild(step2Title);
@@ -218,6 +224,8 @@ export function renderShamirPanel(): PanelHandle {
   signBtnS.textContent = 'Sign (HMAC-SHA256)';
 
   const signResultS = document.createElement('div');
+  signResultS.setAttribute('role', 'status');
+  signResultS.setAttribute('aria-live', 'polite');
 
   step3.appendChild(step3Label);
   step3.appendChild(step3Title);
@@ -244,10 +252,9 @@ export function renderShamirPanel(): PanelHandle {
   }
 
   function updateReconstructBtn() {
-    const k = Math.min(10, Math.max(2, parseInt(kInput.value) || 3));
-    reconstructBtn.disabled = selectedIndices.size < k;
-    reconstructBtn.title = selectedIndices.size < k
-      ? `Select at least ${k} shares to reconstruct`
+    reconstructBtn.disabled = selectedIndices.size < activeK;
+    reconstructBtn.title = selectedIndices.size < activeK
+      ? `Select at least ${activeK} shares to reconstruct`
       : '';
   }
 
@@ -268,6 +275,7 @@ export function renderShamirPanel(): PanelHandle {
       alert(String(e));
       return;
     }
+    activeK = k; // shares now require exactly k of n to reconstruct
 
     // Reset downstream state
     selectedIndices.clear();
@@ -345,9 +353,8 @@ export function renderShamirPanel(): PanelHandle {
 
   // ── Reconstruct handler ──────────────────────────────────────────────────
   reconstructBtn.addEventListener('click', () => {
-    const k = Math.min(10, Math.max(2, parseInt(kInput.value) || 3));
     const selected = shares.filter(s => selectedIndices.has(s.x));
-    if (selected.length < k) return;
+    if (selected.length < activeK) return;
 
     try {
       reconstructedSecret = reconstruct(selected);
@@ -393,7 +400,7 @@ export function renderShamirPanel(): PanelHandle {
   });
 
   // ── Sign handler ─────────────────────────────────────────────────────────
-  signBtnS.addEventListener('click', async () => {
+  async function doSign() {
     if (!reconstructedSecret) return;
 
     const msg = msgInputS.value;
@@ -434,11 +441,13 @@ export function renderShamirPanel(): PanelHandle {
       signResultS.innerHTML = '';
       signResultS.appendChild(callout('warn', '✗', `Signing failed: ${e}`));
     }
-  });
+  }
+  signBtnS.addEventListener('click', () => { void doSign(); });
 
   // ── Panel control API (used by the page for Run-both / Reset / Compromise) ──
   function reset() {
     shares = [];
+    activeK = 0;
     selectedIndices.clear();
     reconstructedSecret = null;
     shareGrid.innerHTML = '';
@@ -461,12 +470,11 @@ export function renderShamirPanel(): PanelHandle {
   async function runAll() {
     reset();
     splitBtn.click();
-    const k = Math.min(10, Math.max(2, parseInt(kInput.value) || 3));
+    // activeK is now set by the split handler to the threshold actually used.
     const cards = Array.from(shareGrid.children) as HTMLElement[];
-    for (let i = 0; i < k && i < cards.length; i++) cards[i].click();
+    for (let i = 0; i < activeK && i < cards.length; i++) cards[i].click();
     reconstructBtn.click();
-    await new Promise(r => setTimeout(r, 150));
-    signBtnS.click();
+    await doSign(); // await the async HMAC so the run truly completes
   }
 
   function attack() {
