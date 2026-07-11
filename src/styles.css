@@ -2,6 +2,9 @@
 
 :root {
   --accent: #7b5ea7;
+  /* Accent tuned for TEXT on dark surfaces (the base --accent is a fill color
+     with white ink; as text on a dark card it only hits ~3.3:1). */
+  --accent-text: #ad93d4;
 
   /* Dark theme (default) */
   --bg: #0f0f13;
@@ -9,7 +12,7 @@
   --surface-2: #21212f;
   --border: #2e2e42;
   --text: #e8e8f0;
-  --text-muted: #8888aa;
+  --text-muted: #9e9ec4;
   --text-on-accent: #ffffff;
 
   --key-in-memory: #d97706;
@@ -17,6 +20,9 @@
   --key-safe: #22c55e;
   --key-safe-bg: rgba(34, 197, 94, 0.10);
   --danger: #ef4444;
+  /* Danger as text needs a lighter red on the dark danger tint (base #ef4444
+     is ~4.2:1 there). Border/fill keep --danger. */
+  --danger-text: #f87171;
   --danger-bg: rgba(239, 68, 68, 0.10);
   --success-bg: rgba(123, 94, 167, 0.15);
 
@@ -30,6 +36,8 @@
 
 [data-theme="light"] {
   --accent: #6b4d97;
+  /* On light surfaces --accent is already a valid text color (>=5.8:1). */
+  --accent-text: #6b4d97;
   --bg: #f0f0f8;
   --surface: #ffffff;
   --surface-2: #f4f4fc;
@@ -38,20 +46,32 @@
   --text-muted: #666688;
   --text-on-accent: #ffffff;
 
-  --key-in-memory: #b45309;
+  /* These semantic colors are used as BOTH border and text. On light tints the
+     previous values fell just under 4.5:1 as text; darkened to clear AA while
+     staying the same hue for the border/at-a-glance cue. */
+  --key-in-memory: #9a4d09;
   --key-in-memory-bg: rgba(180, 83, 9, 0.09);
-  --key-safe: #16a34a;
+  --key-safe: #0f7a37;
   --key-safe-bg: rgba(22, 163, 74, 0.08);
-  --danger: #dc2626;
+  --danger: #b91c1c;
+  --danger-text: #b91c1c;
   --danger-bg: rgba(220, 38, 38, 0.08);
   --success-bg: rgba(107, 77, 151, 0.10);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* html carries its own background (WebKit promotes body's bg to the canvas and
+   then reports body as transparent, which makes axe assume a white page). */
+html {
+  background-color: var(--bg);
+  color-scheme: dark;
+}
+[data-theme="light"] { color-scheme: light; }
+
 body {
   font-family: var(--font-sans);
-  background: var(--bg);
+  background-color: var(--bg);
   color: var(--text);
   line-height: 1.6;
   min-height: 100vh;
@@ -80,7 +100,7 @@ body {
 
 /* ── Cards ── */
 .card {
-  background: var(--surface);
+  background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.25rem;
@@ -144,16 +164,16 @@ body {
   padding: 0.85rem 1rem;
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: var(--surface);
+  background-color: var(--surface);
   transition: background 0.3s, border-color 0.3s, color 0.3s;
 }
 .verdict-cell.vc-warn {
-  background: var(--key-in-memory-bg);
+  background-color: var(--key-in-memory-bg);
   border-color: var(--key-in-memory);
   color: var(--key-in-memory);
 }
 .verdict-cell.vc-safe {
-  background: var(--key-safe-bg);
+  background-color: var(--key-safe-bg);
   border-color: var(--key-safe);
   color: var(--key-safe);
 }
@@ -185,19 +205,19 @@ body {
 }
 
 .key-badge.state-warn {
-  background: var(--key-in-memory-bg);
+  background-color: var(--key-in-memory-bg);
   color: var(--key-in-memory);
   border-color: var(--key-in-memory);
 }
 
 .key-badge.state-safe {
-  background: var(--key-safe-bg);
+  background-color: var(--key-safe-bg);
   color: var(--key-safe);
   border-color: var(--key-safe);
 }
 
 .key-badge.state-neutral {
-  background: var(--surface-2);
+  background-color: var(--surface-2);
   color: var(--text-muted);
   border-color: var(--border);
 }
@@ -215,7 +235,7 @@ body {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.09em;
-  color: var(--accent);
+  color: var(--accent-text);
   margin-bottom: 0.3rem;
 }
 
@@ -245,7 +265,7 @@ body {
 .btn:disabled { opacity: 0.38; cursor: not-allowed; }
 
 .btn-primary {
-  background: var(--accent);
+  background-color: var(--accent);
   color: var(--text-on-accent);
   border-color: var(--accent);
 }
@@ -270,7 +290,7 @@ body {
 .field input,
 .field textarea,
 .field select {
-  background: var(--surface-2);
+  background-color: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
@@ -304,7 +324,7 @@ body {
 
 /* ── Monospace output ── */
 .mono-box {
-  background: var(--surface-2);
+  background-color: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0.55rem 0.7rem;
@@ -322,7 +342,7 @@ body {
   right: 0.3rem;
   padding: 0.15rem 0.45rem;
   font-size: 0.68rem;
-  background: var(--surface);
+  background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
@@ -345,24 +365,24 @@ body {
 .callout-icon { font-size: 1rem; flex-shrink: 0; margin-top: 0.05rem; }
 
 .callout-warn {
-  background: var(--key-in-memory-bg);
+  background-color: var(--key-in-memory-bg);
   border: 1px solid var(--key-in-memory);
   color: var(--key-in-memory);
 }
 .callout-safe {
-  background: var(--key-safe-bg);
+  background-color: var(--key-safe-bg);
   border: 1px solid var(--key-safe);
   color: var(--key-safe);
 }
 .callout-info {
-  background: var(--success-bg);
+  background-color: var(--success-bg);
   border: 1px solid var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .callout-danger {
-  background: var(--danger-bg);
+  background-color: var(--danger-bg);
   border: 1px solid var(--danger);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 /* ── Share grid ── */
@@ -374,7 +394,7 @@ body {
 }
 
 .share-card {
-  background: var(--surface-2);
+  background-color: var(--surface-2);
   border: 2px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0.5rem 0.45rem;
@@ -386,7 +406,7 @@ body {
 .share-card:focus-visible { outline: 2px solid var(--accent); }
 .share-card.selected {
   border-color: var(--accent);
-  background: var(--success-bg);
+  background-color: var(--success-bg);
 }
 .share-card-label {
   font-size: 0.68rem;
@@ -397,7 +417,7 @@ body {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .share-card-y {
   font-family: var(--font-mono);
@@ -416,7 +436,7 @@ body {
 }
 
 .participant-card {
-  background: var(--surface-2);
+  background-color: var(--surface-2);
   border: 2px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0.6rem 0.4rem;
@@ -428,19 +448,19 @@ body {
 .participant-card:focus-visible { outline: 2px solid var(--accent); }
 .participant-card.selected {
   border-color: var(--accent);
-  background: var(--success-bg);
+  background-color: var(--success-bg);
 }
 .participant-card.committed {
   border-color: var(--key-safe);
-  background: var(--key-safe-bg);
+  background-color: var(--key-safe-bg);
 }
 .participant-card.signed {
   border-color: var(--key-safe);
-  background: var(--key-safe-bg);
+  background-color: var(--key-safe-bg);
 }
 .participant-card.compromised {
   border-color: var(--danger);
-  background: var(--danger-bg);
+  background-color: var(--danger-bg);
 }
 .participant-icon { font-size: 1.4rem; margin-bottom: 0.2rem; }
 .participant-label { font-size: 0.68rem; color: var(--text-muted); }
@@ -464,7 +484,7 @@ body {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  background: var(--surface-2);
+  background-color: var(--surface-2);
 }
 .comparison-table th:nth-child(1) { color: var(--text-muted); width: 26%; }
 .comparison-table th.col-shamir { color: var(--key-in-memory); }
@@ -481,7 +501,7 @@ body {
 @media (max-width: 640px) { .decision-grid { grid-template-columns: 1fr; } }
 
 .decision-card {
-  background: var(--surface);
+  background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.25rem;
@@ -536,12 +556,12 @@ body {
   white-space: nowrap;
 }
 .ts-safe {
-  background: var(--key-safe-bg);
+  background-color: var(--key-safe-bg);
   color: var(--key-safe);
   border-right: 1px solid var(--border);
 }
 .ts-danger {
-  background: var(--key-in-memory-bg);
+  background-color: var(--key-in-memory-bg);
   color: var(--key-in-memory);
   border-right: 1px solid var(--key-in-memory);
 }
@@ -550,7 +570,7 @@ body {
 .poly-viz {
   width: 100%;
   height: 140px;
-  background: var(--surface-2);
+  background-color: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   margin: 0.65rem 0;
@@ -565,7 +585,7 @@ body {
 }
 
 .risk-card {
-  background: var(--surface);
+  background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.1rem;
