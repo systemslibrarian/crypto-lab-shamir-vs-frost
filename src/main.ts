@@ -10,13 +10,17 @@ const app = document.getElementById('app')!;
 
 // ── Page hero ────────────────────────────────────────────────────────────────
 const hero = document.createElement('div');
-hero.style.cssText = 'margin-bottom:2.5rem';
+hero.className = 'cl-hero';
 hero.innerHTML = `
-  <h1 style="font-size:1.9rem;font-weight:800;margin-bottom:0.4rem;line-height:1.2">Shamir's Secret Sharing <span style="color:var(--text-muted);font-weight:600">vs</span> FROST threshold signatures</h1>
-  <p style="color:var(--text-muted);font-size:1rem;max-width:680px">
-    The same concept, a critically different security property.
-    <strong style="color:var(--text)">One reconstructs the key. The other never does.</strong>
-  </p>
+  <div class="cl-hero-main">
+    <h1 class="cl-hero-title">Shamir vs FROST</h1>
+    <p class="cl-hero-sub">Secret Sharing · Threshold Signatures</p>
+    <p class="cl-hero-desc">Run both schemes side-by-side and watch the key badges diverge: Shamir reassembles the private key in memory to use it, while FROST signs without ever assembling it on any machine.</p>
+  </div>
+  <aside class="cl-hero-why" aria-label="Why it matters">
+    <span class="cl-hero-why-label">WHY IT MATTERS</span>
+    <p class="cl-hero-why-text">The instant a key is reconstructed, that machine becomes a single point of total compromise. Threshold signing removes that window entirely — the whole reason it now guards custody wallets, root CAs, and validator keys.</p>
+  </aside>
 `;
 app.appendChild(hero);
 
