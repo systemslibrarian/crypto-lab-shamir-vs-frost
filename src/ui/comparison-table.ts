@@ -45,14 +45,26 @@ const ROWS: Array<{ label: string; shamir: string; frost: string; tip: string }>
   },
 ];
 
+// Show the 3 most load-bearing rows first; the rest are behind an expander so
+// the learner interacts before absorbing the full vocabulary.
+const INITIAL_ROWS = 3;
+
 export function renderComparisonTable(): HTMLElement {
   const section = document.createElement('section');
   section.className = 'section';
 
+  const rowHtml = (r: typeof ROWS[number], hidden: boolean) => `
+          <tr${hidden ? ' class="ct-extra" hidden' : ''}>
+            <th scope="row">${escHtml(r.label)}</th>
+            <td>${escHtml(r.shamir)}</td>
+            <td>${escHtml(r.frost)}</td>
+          </tr>`;
+
   section.innerHTML = `
-    <h2 class="section-title">Quick Comparison</h2>
-    <p class="section-subtitle">Seven dimensions that reveal why these protocols are fundamentally different tools.</p>
-    <div class="card" style="overflow-x:auto">
+    <h2 class="section-title">The Comparison, In Full</h2>
+    <p class="section-subtitle">Now that you have watched both run, here is the whole side-by-side. The first three rows are the ones that matter most; expand for all seven dimensions.</p>
+    <div class="card">
+      <div class="ct-scroll" tabindex="0" role="region" aria-label="Shamir vs FROST comparison table">
       <table class="comparison-table" aria-label="Shamir vs FROST comparison">
         <thead>
           <tr>
@@ -62,16 +74,22 @@ export function renderComparisonTable(): HTMLElement {
           </tr>
         </thead>
         <tbody>
-          ${ROWS.map(r => `
-          <tr>
-            <th scope="row">${escHtml(r.label)}</th>
-            <td>${escHtml(r.shamir)}</td>
-            <td>${escHtml(r.frost)}</td>
-          </tr>`).join('')}
+          ${ROWS.map((r, i) => rowHtml(r, i >= INITIAL_ROWS)).join('')}
         </tbody>
       </table>
+      </div>
+      <button type="button" class="btn btn-ghost ct-toggle" aria-expanded="false">Show all ${ROWS.length} dimensions</button>
     </div>
   `;
+
+  const toggle = section.querySelector('.ct-toggle') as HTMLButtonElement;
+  const extras = Array.from(section.querySelectorAll<HTMLTableRowElement>('.ct-extra'));
+  toggle.addEventListener('click', () => {
+    const expanded = toggle.getAttribute('aria-expanded') === 'true';
+    extras.forEach(tr => { tr.hidden = expanded; });
+    toggle.setAttribute('aria-expanded', String(!expanded));
+    toggle.textContent = expanded ? `Show all ${ROWS.length} dimensions` : 'Show fewer';
+  });
 
   return section;
 }

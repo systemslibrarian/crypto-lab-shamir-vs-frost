@@ -4,6 +4,13 @@
 
 Threshold Lab is a side-by-side interactive browser demo comparing Shamir's Secret Sharing (SSS) and FROST threshold signatures (RFC 9591). Shamir SSS splits a secret into _n_ shares using polynomial interpolation over GF(256), requiring any _k_ shares to reconstruct the original — but reconstruction assembles the full secret in memory before it can be used. FROST (Flexible Round-Optimized Schnorr Threshold) distributes an Ed25519 signing key across _n_ participants so that any _k_ can co-sign a message in two rounds _without the private key ever existing on any single machine_. The demo uses real cryptographic primitives: hand-rolled GF(256) Shamir, full FROST signing over the Ed25519 scalar field via `@noble/curves`, and SubtleCrypto HMAC-SHA256 — no simulation, no backend.
 
+The demo is built to teach both mechanisms, not just assert them:
+
+- **Shamir "why exactly _k_?" interpolation view.** As you select shares, a live view fans out infinitely many degree-(_k_−1) curves through _k_−1 points (the secret at _x_=0 could be anything → perfect secrecy), then snaps to the single curve that fits once you reach _k_ points (the secret is pinned down). The curves are real polynomials evaluated over the reals — an honest illustration of the Lagrange-interpolation theorem that governs the GF(256) implementation, kept separate from the actual share bytes shown alongside.
+- **FROST aggregation view.** On Sign, each selected participant emits a partial-signature chip _z_i_ computed from only their own share, and a running sum accumulates them into the single 64-byte aggregate — making "_k_ partials add up, no share ever meets another, the key is never assembled" visible rather than a black-box "valid" badge.
+- **Inline glossary.** First uses of _threshold (k of n)_, _nonce_, _commitment_, _hiding nonce_, _Lagrange coefficient_, _binding factor_, _partial signature_, and _DKG_ carry dotted-underline tooltips (hover/focus/tap) so the deeper layers don't assume vocabulary the top-level story hasn't introduced.
+- **Progressive disclosure.** The interactive head-to-head comes first; the full seven-dimension comparison table follows it, collapsed to the three load-bearing rows with a "show all dimensions" expander — the summary you read _after_ building intuition, not the opening wall of jargon.
+
 ## When to Use It
 
 - **Seed phrase / key escrow backup (use Shamir):** When you need to recover a static secret — a BIP-39 mnemonic, an encryption key, a root credential — and recovery is the goal, not ongoing signing. Shamir is simple and offline-friendly; the reconstruction window is the accepted trade-off.
@@ -16,7 +23,7 @@ Threshold Lab is a side-by-side interactive browser demo comparing Shamir's Secr
 
 [https://crypto-lab.systemslibrarian.dev/crypto-lab-shamir-vs-frost/](https://crypto-lab.systemslibrarian.dev/crypto-lab-shamir-vs-frost/)
 
-Walk through both protocols side-by-side using the same logical key material. On the Shamir panel, set _n_ (total shares) and _k_ (threshold), split a secret, select _k_ shares to reconstruct, and sign a message — watching the "Private key in memory" badge flip to amber the moment the secret is assembled. On the FROST panel, distribute shares, generate Round 1 commitments, select _k_ participants, and sign — the "Key never reconstructed" badge stays green throughout. Three interactive risk scenarios show what an attacker gains at each stage of each protocol.
+Walk through both protocols side-by-side using the same logical key material. On the Shamir panel, set _n_ (total shares) and _k_ (threshold), split a secret, then select shares one at a time and watch the interpolation view go from a fan of undetermined curves (below _k_) to a single locked curve that reveals the secret (at _k_) — the "Private key in memory" badge flips to amber the moment the secret is assembled. On the FROST panel, distribute shares, generate Round 1 commitments, select _k_ participants, and sign — the partial signatures animate into one aggregate while the "Key never reconstructed" badge stays green throughout. Three interactive risk scenarios show what an attacker gains at each stage of each protocol.
 
 ## How to Run Locally
 

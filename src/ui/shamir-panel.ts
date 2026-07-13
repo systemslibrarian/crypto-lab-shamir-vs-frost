@@ -5,6 +5,8 @@ import { split, reconstruct } from '../shamir/shamir.js';
 import type { Share } from '../shamir/types.js';
 import { createKeyBadge, type KeyState, type PanelHandle } from './key-indicator.js';
 import { renderPolyViz } from './poly-viz.js';
+import { renderInterpViz, teachingY } from './interp-viz.js';
+import { withGlossary } from './glossary.js';
 
 const te = new TextEncoder();
 const td = new TextDecoder();
@@ -118,7 +120,8 @@ export function renderShamirPanel(): PanelHandle {
   kField.className = 'field';
   const kLabel = document.createElement('label');
   kLabel.htmlFor = 'shamir-k';
-  kLabel.textContent = 'Threshold (k)';
+  kLabel.appendChild(document.createTextNode(''));
+  kLabel.appendChild(withGlossary('threshold', 'Threshold (k)'));
   const kInput = document.createElement('input');
   kInput.type = 'number';
   kInput.id = 'shamir-k';
@@ -177,6 +180,21 @@ export function renderShamirPanel(): PanelHandle {
   step2Hint.className = 'text-muted text-xs mb-sm';
   step2Hint.textContent = 'Click shares above to select. Reconstruct requires ≥ k shares.';
 
+  // Live interpolation intuition: fans of curves with < k points, one locked
+  // curve at k. Teaches "why exactly k?" as something you watch happen.
+  const interpWrap = document.createElement('div');
+  interpWrap.className = 'interp-wrap';
+  interpWrap.style.display = 'none';
+  const interpHeading = document.createElement('p');
+  interpHeading.className = 'text-xs text-muted mb-sm';
+  interpHeading.textContent = 'Why exactly k? — an illustration over the real numbers (the theorem holds over any field, including the GF(256) used above; the coordinates here are chosen for legibility, not the actual share bytes):';
+  const interpCaption = document.createElement('p');
+  interpCaption.className = 'text-xs mb-sm';
+  const interpSvgHost = document.createElement('div');
+  interpWrap.appendChild(interpHeading);
+  interpWrap.appendChild(interpCaption);
+  interpWrap.appendChild(interpSvgHost);
+
   const reconstructBtn = document.createElement('button');
   reconstructBtn.className = 'btn btn-primary';
   reconstructBtn.textContent = 'Reconstruct';
@@ -189,6 +207,7 @@ export function renderShamirPanel(): PanelHandle {
   step2.appendChild(step2Label);
   step2.appendChild(step2Title);
   step2.appendChild(step2Hint);
+  step2.appendChild(interpWrap);
   step2.appendChild(reconstructBtn);
   step2.appendChild(reconstructResult);
   card.appendChild(step2);
@@ -205,7 +224,11 @@ export function renderShamirPanel(): PanelHandle {
 
   const step3Title = document.createElement('div');
   step3Title.className = 'step-title';
-  step3Title.textContent = 'Sign a message';
+  step3Title.textContent = 'Use the recovered secret (HMAC-SHA256)';
+
+  const step3Note = document.createElement('p');
+  step3Note.className = 'text-muted text-xs mb-sm';
+  step3Note.textContent = 'Shamir recovers raw bytes, not a signing key — so here we use them as a symmetric HMAC key. This is a different operation from FROST’s Ed25519 signature; what they share is the memory question, not the primitive.';
 
   const msgFieldS = document.createElement('div');
   msgFieldS.className = 'field';
@@ -229,6 +252,7 @@ export function renderShamirPanel(): PanelHandle {
 
   step3.appendChild(step3Label);
   step3.appendChild(step3Title);
+  step3.appendChild(step3Note);
   step3.appendChild(msgFieldS);
   step3.appendChild(signBtnS);
   step3.appendChild(signResultS);
@@ -256,6 +280,30 @@ export function renderShamirPanel(): PanelHandle {
     reconstructBtn.title = selectedIndices.size < activeK
       ? `Select at least ${activeK} shares to reconstruct`
       : '';
+  }
+
+  // Live interpolation intuition, driven by the current selection. Shows the
+  // fan of candidate curves (secret undetermined) until exactly k are chosen,
+  // then the single solved curve locks the secret at x=0.
+  function renderInterp(reconstructed: boolean) {
+    if (activeK < 2) { interpWrap.style.display = 'none'; return; }
+    interpWrap.style.display = 'block';
+    // Cap the visible points at k so the "one curve at k" story reads cleanly,
+    // preferring the shares the learner actually selected.
+    const chosen = [...selectedIndices].slice(0, activeK);
+    const pts = chosen.map(x => ({ x, y: teachingY(x, activeK) }));
+    const locked = reconstructed || selectedIndices.size >= activeK;
+    const showPts = locked ? pts : pts.slice(0, activeK - 1);
+    interpSvgHost.innerHTML = '';
+    interpSvgHost.appendChild(renderInterpViz(showPts, locked, activeK));
+    if (locked) {
+      interpCaption.style.color = 'var(--key-safe)';
+      interpCaption.textContent = `k=${activeK} points selected → exactly one degree-${activeK - 1} curve fits, so the secret at x=0 is now pinned down.`;
+    } else {
+      interpCaption.style.color = 'var(--accent-text)';
+      const need = activeK - selectedIndices.size;
+      interpCaption.textContent = `With ${selectedIndices.size} of k=${activeK} points, infinitely many degree-${activeK - 1} curves still fit — the secret could be anything. Select ${need} more.`;
+    }
   }
 
   // ── Split handler ────────────────────────────────────────────────────────
@@ -325,6 +373,7 @@ export function renderShamirPanel(): PanelHandle {
           sc.setAttribute('aria-checked', 'true');
         }
         updateReconstructBtn();
+        if (!reconstructedSecret) renderInterp(false);
       };
 
       sc.addEventListener('click', toggle);
@@ -338,7 +387,7 @@ export function renderShamirPanel(): PanelHandle {
     vizContainer.style.display = 'block';
     const label = document.createElement('p');
     label.className = 'text-xs text-muted mb-sm';
-    label.textContent = 'Share values (first byte shown). Any k points uniquely determine the secret at x=0.';
+    label.textContent = 'Actual share bytes over GF(256) (first byte of each share). These are the real values you distribute — the smooth-curve view below explains why any k of them are enough.';
     vizContainer.appendChild(label);
     vizContainer.appendChild(renderPolyViz(
       shares.map(s => ({ x: s.x, y: s.y[0] })),
@@ -349,6 +398,7 @@ export function renderShamirPanel(): PanelHandle {
     step2.style.opacity = '1';
     step2.style.pointerEvents = '';
     updateReconstructBtn();
+    renderInterp(false);
   });
 
   // ── Reconstruct handler ──────────────────────────────────────────────────
@@ -366,6 +416,9 @@ export function renderShamirPanel(): PanelHandle {
 
     // 🔴 KEY IS NOW IN MEMORY
     setBadge('warn');
+
+    // Snap the interpolation curve into place, revealing the secret at x=0.
+    renderInterp(true);
 
     reconstructResult.innerHTML = '';
 
@@ -433,7 +486,7 @@ export function renderShamirPanel(): PanelHandle {
 
       const note = document.createElement('p');
       note.className = 'text-xs text-muted mt-sm';
-      note.textContent = 'Note: Shamir SSS protects a symmetric secret. Compare with FROST which signs without ever assembling the private key.';
+      note.textContent = 'Different primitive on purpose: Shamir just recovers raw secret bytes, so here we use them as an HMAC-SHA256 key (a symmetric MAC). FROST instead co-produces a real Ed25519 signature and never recovers a key. Both panels answer "did the key touch memory?" — they are NOT doing the same signing operation.';
       row.appendChild(note);
 
       signResultS.appendChild(row);
@@ -454,6 +507,8 @@ export function renderShamirPanel(): PanelHandle {
     shareGrid.style.display = 'none';
     vizContainer.innerHTML = '';
     vizContainer.style.display = 'none';
+    interpWrap.style.display = 'none';
+    interpSvgHost.innerHTML = '';
     reconstructResult.innerHTML = '';
     signResultS.innerHTML = '';
     attackResult.innerHTML = '';

@@ -24,10 +24,7 @@ hero.innerHTML = `
 `;
 app.appendChild(hero);
 
-// ── Section 1: Comparison table ──────────────────────────────────────────────
-app.appendChild(renderComparisonTable());
-
-// ── Section 2: Interactive head-to-head ─────────────────────────────────────
+// ── Section 1: Interactive head-to-head (learners interact BEFORE the table) ─
 const headToHead = document.createElement('section');
 headToHead.className = 'section';
 
@@ -115,6 +112,9 @@ shamir.onStateChange(s => paintVerdict(vShamir, "Shamir's SSS", s === 'warn'));
 frost.onStateChange(() => paintVerdict(vFrost, 'FROST', false));
 
 app.appendChild(headToHead);
+
+// ── Section 2: Comparison table (the summary, AFTER you have built intuition) ─
+app.appendChild(renderComparisonTable());
 
 // ── Section 3: Timeline ──────────────────────────────────────────────────────
 app.appendChild(renderTimeline());

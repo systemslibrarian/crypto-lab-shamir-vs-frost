@@ -589,6 +589,123 @@ body {
   overflow: visible;
 }
 
+/* ── Interpolation teaching viz (Shamir "why exactly k?") ── */
+.interp-wrap { margin: 0.65rem 0; }
+.interp-viz {
+  width: 100%;
+  height: 200px;
+  background-color: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: block;
+}
+@keyframes interpSnap {
+  from { opacity: 0; stroke-dasharray: 4 6; }
+  to   { opacity: 1; stroke-dasharray: 0 0; }
+}
+.interp-curve-snap { animation: interpSnap 0.5s ease-out; }
+@keyframes secretPop {
+  0%   { r: 0; opacity: 0; }
+  60%  { r: 9; opacity: 1; }
+  100% { r: 6; opacity: 1; }
+}
+.interp-secret-pop { animation: secretPop 0.5s ease-out 0.2s both; }
+@media (prefers-reduced-motion: reduce) {
+  .interp-curve-snap, .interp-secret-pop, .agg-chip { animation: none !important; }
+}
+
+/* ── Inline glossary tooltips ── */
+.glossary-term {
+  border-bottom: 1px dotted var(--accent-text);
+  cursor: help;
+  position: relative;
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.glossary-term:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.glossary-bubble {
+  position: absolute;
+  left: 0;
+  bottom: 125%;
+  z-index: 50;
+  width: max-content;
+  max-width: 260px;
+  background-color: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.45;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s;
+  pointer-events: none;
+}
+.glossary-term:hover .glossary-bubble,
+.glossary-term:focus .glossary-bubble,
+.glossary-term:focus-visible .glossary-bubble {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ── FROST aggregation viz (partial sigs → one aggregate) ── */
+.agg-viz {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--key-safe);
+  border-radius: var(--radius-sm);
+  background-color: var(--key-safe-bg);
+}
+.agg-title { color: var(--text); }
+.agg-caption { color: var(--text); }
+.agg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+@keyframes chipIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.agg-chip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--key-safe);
+  border-radius: 999px;
+  background-color: var(--surface);
+  animation: chipIn 0.3s ease both;
+}
+.agg-chip-who {
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--key-safe);
+  letter-spacing: 0.04em;
+}
+.agg-chip-z { font-size: 0.66rem; color: var(--text); }
+.agg-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+}
+.agg-sum-label { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); }
+.agg-sum-val { font-size: 0.78rem; color: var(--text); transition: color 0.2s; }
+.agg-sum-val.agg-sum-tick { color: var(--key-safe); font-weight: 700; }
+
+/* ── Collapsible comparison table ── */
+.ct-scroll { overflow-x: auto; }
+.ct-toggle { margin-top: 0.85rem; }
+
 /* ── Risk scenarios ── */
 .risk-grid {
   display: grid;

@@ -7,7 +7,9 @@ import { partialSign } from '../frost/round2.js';
 import { aggregate } from '../frost/aggregate.js';
 import { verifySignature } from '../frost/verify.js';
 import type { DealerResult, Nonces, Commitment, PartialSig } from '../frost/types.js';
+import { fieldAdd, scalarToBytes } from '../frost/field.js';
 import { createKeyBadge, type KeyState, type PanelHandle } from './key-indicator.js';
+import { withGlossary } from './glossary.js';
 
 const te = new TextEncoder();
 
@@ -124,7 +126,9 @@ export function renderFrostPanel(): PanelHandle {
 
   const dealerNote = document.createElement('p');
   dealerNote.className = 'text-xs text-muted mt-sm';
-  dealerNote.textContent = 'Simplified: a trusted dealer generates key shares. Production FROST uses Distributed Key Generation (DKG) to remove this trust assumption.';
+  dealerNote.appendChild(document.createTextNode('Simplified: a trusted dealer generates key shares. Production FROST uses '));
+  dealerNote.appendChild(withGlossary('DKG', 'Distributed Key Generation (DKG)'));
+  dealerNote.appendChild(document.createTextNode(' to remove this trust assumption.'));
   step1.appendChild(dealerNote);
 
   const participantGrid = document.createElement('div');
@@ -144,10 +148,17 @@ export function renderFrostPanel(): PanelHandle {
 
   step2.appendChild(Object.assign(document.createElement('div'), { className: 'step-label', textContent: 'Step 2 — Round 1' }));
   step2.appendChild(Object.assign(document.createElement('div'), { className: 'step-title', textContent: 'Generate commitments' }));
-  step2.appendChild(Object.assign(document.createElement('p'), {
-    className: 'text-muted text-xs mb-sm',
-    textContent: 'Each participant generates a random nonce pair and broadcasts the commitments (public values only).',
-  }));
+  const step2Desc = document.createElement('p');
+  step2Desc.className = 'text-muted text-xs mb-sm';
+  step2Desc.appendChild(document.createTextNode('Each participant generates a random '));
+  step2Desc.appendChild(withGlossary('nonce'));
+  step2Desc.appendChild(document.createTextNode(' pair and broadcasts the '));
+  step2Desc.appendChild(withGlossary('commitment', 'commitments'));
+  step2Desc.appendChild(document.createTextNode(' (public values only). '));
+  const nonceWarn = withGlossary('nonce', 'Reusing a nonce is catastrophic');
+  step2Desc.appendChild(nonceWarn);
+  step2Desc.appendChild(document.createTextNode(' — it leaks the share, so a fresh pair is drawn every round.'));
+  step2.appendChild(step2Desc);
 
   const commitBtn = document.createElement('button');
   commitBtn.className = 'btn btn-primary';
@@ -166,10 +177,16 @@ export function renderFrostPanel(): PanelHandle {
 
   step3.appendChild(Object.assign(document.createElement('div'), { className: 'step-label', textContent: 'Step 3 — Round 2' }));
   step3.appendChild(Object.assign(document.createElement('div'), { className: 'step-title', textContent: 'Collaborative signing' }));
-  step3.appendChild(Object.assign(document.createElement('p'), {
-    className: 'text-muted text-xs mb-sm',
-    textContent: 'Select at least k participants. Each produces a partial signature using only their own share.',
-  }));
+  const step3Desc = document.createElement('p');
+  step3Desc.className = 'text-muted text-xs mb-sm';
+  step3Desc.appendChild(document.createTextNode('Select at least k participants. Each produces a '));
+  step3Desc.appendChild(withGlossary('partial signature'));
+  step3Desc.appendChild(document.createTextNode(' using only their own share — the '));
+  step3Desc.appendChild(withGlossary('Lagrange coefficient'));
+  step3Desc.appendChild(document.createTextNode(' and '));
+  step3Desc.appendChild(withGlossary('binding factor'));
+  step3Desc.appendChild(document.createTextNode(' make the parts combine into exactly one Ed25519 signature.'));
+  step3.appendChild(step3Desc);
 
   const signerGrid = document.createElement('div');
   signerGrid.className = 'participant-grid';
@@ -198,6 +215,12 @@ export function renderFrostPanel(): PanelHandle {
   signErr.style.display = 'none';
   step3.appendChild(signErr);
 
+  // Aggregation visualization: partial-signature chips flowing into one sum.
+  const aggViz = document.createElement('div');
+  aggViz.className = 'agg-viz';
+  aggViz.style.display = 'none';
+  step3.appendChild(aggViz);
+
   const signResult = document.createElement('div');
   signResult.setAttribute('role', 'status');
   signResult.setAttribute('aria-live', 'polite');
@@ -212,6 +235,75 @@ export function renderFrostPanel(): PanelHandle {
   attackResult.setAttribute('role', 'status');
   attackResult.setAttribute('aria-live', 'polite');
   card.appendChild(attackResult);
+
+  // Short hex of a scalar (first/last bytes) for a compact chip label.
+  function shortScalar(s: bigint): string {
+    const b = scalarToBytes(s);
+    const hx = hexOf(b);
+    return `${hx.slice(0, 6)}…${hx.slice(-4)}`;
+  }
+
+  // Render the k partial signatures (z_i) as chips, then show the running sum
+  // accumulating one at a time into the aggregate z. This is the whole thesis
+  // made visible: each z_i comes from ONE share, and only their SUM is a
+  // signature — no share ever met another, no key was ever assembled.
+  function renderAggregation(partials: PartialSig[]) {
+    aggViz.style.display = 'block';
+    aggViz.innerHTML = '';
+
+    const title = document.createElement('p');
+    title.className = 'text-xs mb-sm agg-title';
+    title.textContent = 'Watch the aggregate build: each participant emits one partial signature z_i from only their own share, and the parts add up.';
+    aggViz.appendChild(title);
+
+    const chipRow = document.createElement('div');
+    chipRow.className = 'agg-chips';
+    chipRow.setAttribute('role', 'list');
+    chipRow.setAttribute('aria-label', 'Partial signatures being aggregated');
+    aggViz.appendChild(chipRow);
+
+    const sumLine = document.createElement('div');
+    sumLine.className = 'agg-sum';
+    const sumLabel = document.createElement('span');
+    sumLabel.className = 'agg-sum-label';
+    sumLabel.textContent = 'running sum z =';
+    const sumVal = document.createElement('span');
+    sumVal.className = 'agg-sum-val font-mono';
+    sumVal.setAttribute('role', 'status');
+    sumVal.setAttribute('aria-live', 'polite');
+    sumVal.textContent = '0';
+    sumLine.appendChild(sumLabel);
+    sumLine.appendChild(sumVal);
+    aggViz.appendChild(sumLine);
+
+    const caption = document.createElement('p');
+    caption.className = 'text-xs mt-sm agg-caption';
+    caption.textContent = `${partials.length} partial signatures add up — no share ever met another, and the private key was never assembled on any machine.`;
+    aggViz.appendChild(caption);
+
+    let running = 0n;
+    partials.forEach((ps, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'agg-chip';
+      chip.setAttribute('role', 'listitem');
+      chip.style.animationDelay = `${i * 0.18}s`;
+      chip.innerHTML =
+        `<span class="agg-chip-who">P${ps.participantIndex}</span>` +
+        `<span class="agg-chip-z font-mono">z_${ps.participantIndex} = ${shortScalar(ps.z)}</span>`;
+      chip.setAttribute('aria-label', `Partial signature from participant ${ps.participantIndex}`);
+      chipRow.appendChild(chip);
+
+      // Accumulate the running sum with the same field arithmetic used by the
+      // real aggregate() — this is the actual sum, not a mock.
+      running = fieldAdd(running, ps.z);
+      const snapshot = running;
+      setTimeout(() => {
+        sumVal.textContent = shortScalar(snapshot);
+        sumVal.classList.add('agg-sum-tick');
+        setTimeout(() => sumVal.classList.remove('agg-sum-tick'), 200);
+      }, (i + 1) * 180);
+    });
+  }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function getK(): number { return Math.min(10, Math.max(2, parseInt(kInput.value) || 3)); }
@@ -330,10 +422,12 @@ export function renderFrostPanel(): PanelHandle {
     const firstC = commitmentsMap.get(1)!;
     const row = document.createElement('div');
     row.className = 'col mt-sm';
-    row.appendChild(Object.assign(document.createElement('span'), {
-      className: 'text-muted text-xs',
-      textContent: 'Participant 1 commitment D (hiding nonce):',
-    }));
+    const dLabel = document.createElement('span');
+    dLabel.className = 'text-muted text-xs';
+    dLabel.appendChild(document.createTextNode('Participant 1 commitment D (public point of the '));
+    dLabel.appendChild(withGlossary('hiding nonce'));
+    dLabel.appendChild(document.createTextNode('):'));
+    row.appendChild(dLabel);
     row.appendChild(monoBox(hexOf(firstC.D)));
     commitResult.appendChild(row);
 
@@ -398,6 +492,9 @@ export function renderFrostPanel(): PanelHandle {
       const aggSig = aggregate(partialSigs, signingCommitments, dealer.groupPublicKey, msgBytes);
       const valid = verifySignature(aggSig, dealer.groupPublicKey, msgBytes);
 
+      // Show the partials combining into the aggregate before the verdict.
+      renderAggregation(partialSigs);
+
       signResult.innerHTML = '';
 
       if (valid) {
@@ -441,6 +538,8 @@ export function renderFrostPanel(): PanelHandle {
     signerGrid.innerHTML = '';
     signResult.innerHTML = '';
     signErr.style.display = 'none';
+    aggViz.style.display = 'none';
+    aggViz.innerHTML = '';
     attackResult.innerHTML = '';
     attackResult.style.display = 'none';
     signBtn.disabled = true;
