@@ -10,7 +10,7 @@ const ROWS: Array<{ label: string; shamir: string; frost: string; tip: string }>
   {
     label: 'What gets split',
     shamir: 'The raw secret bytes — a seed phrase, symmetric key, or private key scalar',
-    frost: 'The private signing key scalar into additive shares in Z_ℓ',
+    frost: 'The private signing key scalar into Shamir (polynomial) shares in Z_ℓ',
     tip: 'In both cases a polynomial is used, but the field and purpose differ.',
   },
   {
