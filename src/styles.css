@@ -11,6 +11,9 @@
   --surface: #1a1a24;
   --surface-2: #21212f;
   --border: #2e2e42;
+  /* Inputs use a stronger boundary than decorative card and divider rules.
+     This clears 3:1 against both dark surfaces (SC 1.4.11). */
+  --border-strong: #6f6f87;
   --text: #e8e8f0;
   --text-muted: #9e9ec4;
   --text-on-accent: #ffffff;
@@ -42,6 +45,7 @@
   --surface: #ffffff;
   --surface-2: #f4f4fc;
   --border: #ddddef;
+  --border-strong: #85859a;
   --text: #1a1a2e;
   --text-muted: #666688;
   --text-on-accent: #ffffff;
@@ -301,7 +305,7 @@ body {
 .field textarea,
 .field select {
   background-color: var(--surface-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   color: var(--text);
   font-family: var(--font-sans);
