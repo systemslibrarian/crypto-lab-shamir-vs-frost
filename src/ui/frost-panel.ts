@@ -3,9 +3,7 @@
 
 import { dealerKeyGen } from '../frost/keygen.js';
 import { generateCommitment } from '../frost/round1.js';
-import { partialSign } from '../frost/round2.js';
-import { aggregate } from '../frost/aggregate.js';
-import { verifySignature } from '../frost/verify.js';
+import { signWithSubset, soloForgeAttempt } from '../frost/attack.js';
 import type { DealerResult, Nonces, Commitment, PartialSig } from '../frost/types.js';
 import { fieldAdd, scalarToBytes } from '../frost/field.js';
 import { createKeyBadge, type KeyState, type PanelHandle } from './key-indicator.js';
@@ -309,10 +307,19 @@ export function renderFrostPanel(): PanelHandle {
   function getK(): number { return Math.min(10, Math.max(2, parseInt(kInput.value) || 3)); }
   function getN(): number { return Math.min(10, Math.max(2, parseInt(nInput.value) || 5)); }
 
+  // Signing below the threshold is deliberately allowed: disabling the button
+  // would hide the very property this panel argues for. The button stays live
+  // from one signer up, and the real verifier passes judgement.
   function updateSignBtn() {
     const k = getK();
-    signBtn.disabled = selectedSigners.size < k;
-    signBtn.title = selectedSigners.size < k ? `Select at least ${k} participants to sign` : '';
+    const count = selectedSigners.size;
+    signBtn.disabled = count === 0;
+    signBtn.textContent = count > 0 && count < k ? `Sign anyway (${count} of k=${k})` : 'Sign';
+    signBtn.title = count === 0
+      ? 'Select at least one participant'
+      : count < k
+        ? `Below the threshold — sign anyway and watch the verifier reject it`
+        : '';
   }
 
   function buildSignerGrid() {
@@ -453,53 +460,32 @@ export function renderFrostPanel(): PanelHandle {
     const msgBytes = te.encode(msg);
 
     const k = getK();
-    if (selectedSigners.size < k) {
-      signErr.innerHTML = '';
-      signErr.appendChild(inlineErr(`Select at least ${k} participants to sign`));
-      signErr.style.display = '';
-      return;
-    }
+    const signerIndices = [...selectedSigners];
+    const belowThreshold = signerIndices.length < k;
 
-    const signingIndices = [...selectedSigners].map(BigInt);
-    const signingCommitments: Commitment[] = [];
-    for (const idx of selectedSigners) {
-      const c = commitmentsMap.get(idx);
-      if (!c) {
+    for (const idx of signerIndices) {
+      if (!commitmentsMap.has(idx)) {
         signErr.innerHTML = '';
         signErr.appendChild(inlineErr(`Commitment missing for participant ${idx} — run Round 1 first`));
         signErr.style.display = '';
         return;
       }
-      signingCommitments.push(c);
     }
 
     try {
-      const partialSigs: PartialSig[] = [];
-      for (const idx of selectedSigners) {
-        const p = dealer.participants.find(x => x.index === idx)!;
-        partialSigs.push(partialSign({
-          participantIndex: idx,
-          secretShare: p.secretShare,
-          nonces: noncesMap.get(idx)!,
-          commitment: commitmentsMap.get(idx)!,
-          signingCommitments,
-          groupPublicKey: dealer.groupPublicKey,
-          message: msgBytes,
-          signingIndices,
-        }));
-      }
-
-      const aggSig = aggregate(partialSigs, signingCommitments, dealer.groupPublicKey, msgBytes);
-      const valid = verifySignature(aggSig, dealer.groupPublicKey, msgBytes);
+      // The identical Round 2 path whatever the signer count. Below k the
+      // Lagrange coefficients interpolate the wrong set, so the aggregate does
+      // not correspond to the group secret — and the verifier says so.
+      const attempt = signWithSubset(dealer, signerIndices, noncesMap, commitmentsMap, msgBytes);
 
       // Show the partials combining into the aggregate before the verdict.
-      renderAggregation(partialSigs);
+      renderAggregation(attempt.partials);
 
       signResult.innerHTML = '';
 
-      if (valid) {
+      if (attempt.verified) {
         signResult.appendChild(callout('safe', '✓',
-          `Signature valid. ${selectedSigners.size} of ${dealer.n} participants signed without ever assembling the private key. The group public key verifies the result.`));
+          `Signature valid. ${signerIndices.length} of ${dealer.n} participants signed without ever assembling the private key. The group public key verifies the result.`));
 
         const col = document.createElement('div');
         col.className = 'col mt-sm';
@@ -507,15 +493,34 @@ export function renderFrostPanel(): PanelHandle {
           className: 'text-muted text-xs',
           textContent: 'Ed25519 signature (R || z, 64 bytes):',
         }));
-        col.appendChild(monoBox(hexOf(aggSig.signature)));
+        col.appendChild(monoBox(hexOf(attempt.signature)));
         col.appendChild(Object.assign(document.createElement('p'), {
           className: 'text-xs text-muted mt-sm',
           textContent: 'This is a standard Ed25519 signature. Verified using @noble/curves — the same math as WebCrypto SubtleCrypto.',
         }));
         signResult.appendChild(col);
+      } else if (belowThreshold) {
+        signResult.appendChild(callout('danger', '✗',
+          `Rejected. ${signerIndices.length} participant${signerIndices.length === 1 ? '' : 's'} produced a well-formed 64-byte ` +
+          `Ed25519 signature — the arithmetic never complains — and ed25519.verify() against the group public key ` +
+          `returned false. k=${k} is not a policy check in this demo; it is the number of points needed to interpolate ` +
+          `the group secret at x=0. With ${signerIndices.length}, the Lagrange coefficients reconstruct a different scalar.`));
+
+        const col = document.createElement('div');
+        col.className = 'col mt-sm';
+        col.appendChild(Object.assign(document.createElement('span'), {
+          className: 'text-muted text-xs',
+          textContent: 'Rejected signature (R || z, 64 bytes):',
+        }));
+        col.appendChild(monoBox(hexOf(attempt.signature)));
+        col.appendChild(Object.assign(document.createElement('p'), {
+          className: 'text-xs text-muted mt-sm',
+          textContent: `Select ${k - signerIndices.length} more participant${k - signerIndices.length === 1 ? '' : 's'} and sign again — same code path, and then it verifies.`,
+        }));
+        signResult.appendChild(col);
       } else {
         signResult.appendChild(callout('danger', '✗',
-          'Signature invalid. This should not occur with correct inputs — check the browser console.'));
+          'Signature invalid despite a full quorum. This should not occur with correct inputs — check the browser console.'));
       }
     } catch (e) {
       signResult.innerHTML = '';
@@ -559,20 +564,57 @@ export function renderFrostPanel(): PanelHandle {
     signBtn.click(); // FROST signing is synchronous — no await needed
   }
 
+  // The attacker is handed the victim's real secret share and runs the real
+  // Round 2 with it. The verdict below is ed25519.verify()'s answer, not a
+  // sentence about what would happen.
   function attack() {
     attackResult.style.display = 'block';
     attackResult.innerHTML = '';
-    if (dealer) {
-      const victim = dealer.participants[0];
-      const pc = participantCardEls.get(victim.index);
-      if (pc) pc.classList.add('compromised');
-      attackResult.appendChild(callout('safe', '🛡️',
-        `Attacker compromised participant P${victim.index} and stole their entire share. ` +
-        `It signs nothing on its own — FROST needs k cooperating shares and the private key is never assembled ` +
-        `on any machine. The attacker is stuck.`));
-    } else {
+
+    if (!dealer) {
       attackResult.appendChild(callout('info', '😈',
         'Attacker compromised a participant, but no key has been distributed yet. Run the protocol first.'));
+      return;
+    }
+
+    const victim = dealer.participants[0];
+    const pc = participantCardEls.get(victim.index);
+    if (pc) pc.classList.add('compromised');
+
+    const msg = msgInput.value.trim() || 'Transfer $1000 to Alice';
+    const msgBytes = te.encode(msg);
+
+    try {
+      const forged = soloForgeAttempt(dealer, victim.index, msgBytes);
+
+      attackResult.appendChild(callout('info', '😈',
+        `Attacker owns P${victim.index} outright and has their real signing share ` +
+        `s_${victim.index} = ${shortScalar(victim.secretShare)}. Watch them use it.`));
+
+      const col = document.createElement('div');
+      col.className = 'col mt-sm';
+      col.appendChild(Object.assign(document.createElement('span'), {
+        className: 'text-muted text-xs',
+        textContent: `Signature P${victim.index} produced alone over "${msg}" (R || z, 64 bytes):`,
+      }));
+      col.appendChild(monoBox(hexOf(forged.signature)));
+      attackResult.appendChild(col);
+
+      attackResult.appendChild(callout(forged.verified ? 'danger' : 'safe',
+        forged.verified ? '✗' : '🛡️',
+        forged.verified
+          ? 'ed25519.verify() ACCEPTED the solo signature — that would be a break; check the console.'
+          : `ed25519.verify(signature, message, groupPublicKey) returned <strong>false</strong>. The bytes are ` +
+            `well-formed and the arithmetic ran without error — the share is real — but one share interpolates ` +
+            `to the wrong scalar, so the signature does not match the group public key. The attacker needs ` +
+            `k=${getK()} cooperating shares, and the private key was never assembled anywhere for them to steal instead.`));
+
+      const note = document.createElement('p');
+      note.className = 'text-xs text-muted mt-sm';
+      note.textContent = 'Select k participants above and press Sign to watch the identical code path produce a signature that does verify.';
+      attackResult.appendChild(note);
+    } catch (e) {
+      attackResult.appendChild(callout('danger', '✗', `Attack attempt failed to run: ${e}`));
     }
   }
 

@@ -45,6 +45,9 @@ export function renderShamirPanel(): PanelHandle {
   let shares: Share[] = [];
   let selectedIndices = new Set<number>();
   let reconstructedSecret: Uint8Array | null = null;
+  // The secret that was actually split, kept so the panel can grade every
+  // reconstruction attempt instead of echoing back whatever came out.
+  let originalSecret: Uint8Array | null = null;
   // Threshold the current shares were actually split with. Reconstruction must
   // match this — not whatever the k input reads now — since the user can edit
   // the input after splitting (and validateNK clamps k to n at split time).
@@ -178,7 +181,7 @@ export function renderShamirPanel(): PanelHandle {
 
   const step2Hint = document.createElement('p');
   step2Hint.className = 'text-muted text-xs mb-sm';
-  step2Hint.textContent = 'Click shares above to select. Reconstruct requires ≥ k shares.';
+  step2Hint.textContent = 'Click shares above to select. Fewer than k? Reconstruct anyway — interpolation still returns bytes, and this panel checks them against the real secret.';
 
   // Live interpolation intuition: fans of curves with < k points, one locked
   // curve at k. Teaches "why exactly k?" as something you watch happen.
@@ -275,11 +278,20 @@ export function renderShamirPanel(): PanelHandle {
     return { n, k, valid: k <= n && n >= 2 };
   }
 
+  // Reconstruction below k is deliberately allowed. Disabling the button would
+  // hide what Lagrange interpolation actually returns with too few points — the
+  // whole reason k is the threshold.
   function updateReconstructBtn() {
-    reconstructBtn.disabled = selectedIndices.size < activeK;
-    reconstructBtn.title = selectedIndices.size < activeK
-      ? `Select at least ${activeK} shares to reconstruct`
-      : '';
+    const count = selectedIndices.size;
+    reconstructBtn.disabled = count < 2;
+    reconstructBtn.textContent = count >= 2 && count < activeK
+      ? `Reconstruct anyway (${count} of k=${activeK})`
+      : 'Reconstruct';
+    reconstructBtn.title = count < 2
+      ? 'Select at least 2 shares — interpolation needs two points to draw a line'
+      : count < activeK
+        ? 'Below the threshold — reconstruct anyway and compare what comes back with the real secret'
+        : '';
   }
 
   // Live interpolation intuition, driven by the current selection. Shows the
@@ -323,6 +335,7 @@ export function renderShamirPanel(): PanelHandle {
       alert(String(e));
       return;
     }
+    originalSecret = secretBytes;
     activeK = k; // shares now require exactly k of n to reconstruct
 
     // Reset downstream state
@@ -404,15 +417,51 @@ export function renderShamirPanel(): PanelHandle {
   // ── Reconstruct handler ──────────────────────────────────────────────────
   reconstructBtn.addEventListener('click', () => {
     const selected = shares.filter(s => selectedIndices.has(s.x));
-    if (selected.length < activeK) return;
+    if (selected.length < 2) return;
 
+    let candidate: Uint8Array;
     try {
-      reconstructedSecret = reconstruct(selected);
+      candidate = reconstruct(selected);
     } catch (e) {
       reconstructResult.innerHTML = '';
       reconstructResult.appendChild(callout('warn', '✗', String(e)));
       return;
     }
+
+    // Grade the result against the secret that was actually split. With fewer
+    // than k shares interpolation still returns bytes — they are simply the
+    // wrong ones, and nothing in them says so.
+    const matches = originalSecret !== null
+      && candidate.length === originalSecret.length
+      && candidate.every((b, i) => b === originalSecret![i]);
+
+    if (selected.length < activeK) {
+      // Nothing was recovered, so the key never entered memory: the badge stays put.
+      renderInterp(false);
+      reconstructResult.innerHTML = '';
+      reconstructResult.appendChild(callout('safe', '🛡️',
+        `Interpolation ran on ${selected.length} of k=${activeK} points and returned ${candidate.length} bytes — ` +
+        `it always returns something. Compared against the real secret byte-for-byte: ` +
+        `<strong>${matches ? 'MATCH (should not happen below k)' : 'no match'}</strong>. ` +
+        `Every one of the 256^${candidate.length} possible secrets is equally consistent with the shares you hold, ` +
+        `so the bytes below carry no information about the real one — and nothing in them tells you that.`));
+
+      const wrongRow = document.createElement('div');
+      wrongRow.className = 'col mt-sm';
+      wrongRow.appendChild(Object.assign(document.createElement('span'), {
+        className: 'text-muted text-xs',
+        textContent: `What ${selected.length} shares actually interpolate to (hex):`,
+      }));
+      wrongRow.appendChild(monoBox(hexOf(candidate)));
+      wrongRow.appendChild(Object.assign(document.createElement('p'), {
+        className: 'text-xs text-muted mt-sm',
+        textContent: `Decoded as text: "${td.decode(candidate)}"  ·  Select ${activeK - selected.length} more share${activeK - selected.length === 1 ? '' : 's'} and reconstruct again.`,
+      }));
+      reconstructResult.appendChild(wrongRow);
+      return;
+    }
+
+    reconstructedSecret = candidate;
 
     // 🔴 KEY IS NOW IN MEMORY
     setBadge('warn');
@@ -435,7 +484,8 @@ export function renderShamirPanel(): PanelHandle {
     ));
 
     reconstructResult.appendChild(callout('warn', '⚠',
-      'The full secret now exists in memory. Any code running at this moment has access to it.'));
+      `The full secret now exists in memory. Any code running at this moment has access to it. ` +
+      `Checked against the secret that was split: <strong>${matches ? 'byte-for-byte match' : 'MISMATCH — reconstruction is broken'}</strong>.`));
 
     const secretStr = td.decode(reconstructedSecret);
     const row = document.createElement('div');
@@ -503,6 +553,7 @@ export function renderShamirPanel(): PanelHandle {
     activeK = 0;
     selectedIndices.clear();
     reconstructedSecret = null;
+    originalSecret = null;
     shareGrid.innerHTML = '';
     shareGrid.style.display = 'none';
     vizContainer.innerHTML = '';

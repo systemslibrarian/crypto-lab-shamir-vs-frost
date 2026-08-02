@@ -46,6 +46,13 @@ code. Use a maintained RFC 9591 implementation for anything real.
 
 Walk through both protocols side-by-side using the same logical key material. On the Shamir panel, set _n_ (total shares) and _k_ (threshold), split a secret, then select shares one at a time and watch the interpolation view go from a fan of undetermined curves (below _k_) to a single locked curve that reveals the secret (at _k_) — the "Private key in memory" badge flips to amber the moment the secret is assembled. On the FROST panel, distribute shares, generate Round 1 commitments, select _k_ participants, and sign — the partial signatures animate into one aggregate while the "Key never reconstructed" badge stays green throughout. Three interactive risk scenarios show what an attacker gains at each stage of each protocol.
 
+**The failure paths are runnable, not described.** Both panels deliberately leave the sub-threshold button enabled, because disabling it would hide the property the page argues for:
+
+- **Sign with _k_−1 participants anyway.** The identical Round 2 code produces a well-formed 64-byte Ed25519 signature — the arithmetic never complains — and `ed25519.verify()` against the group public key returns false. Add the missing signer and the same path verifies. _k_ is not a policy check; it is the number of points needed to interpolate the group secret at _x_=0.
+- **Reconstruct Shamir below _k_ anyway.** Lagrange interpolation always returns bytes. The panel prints exactly what came back and compares it byte-for-byte with the secret that was split: no match, and nothing in the returned bytes says so. That indistinguishability *is* the perfect-secrecy claim.
+- **Compromise a participant for real.** The attacker is handed a participant's genuine secret share, generates their own nonces, runs Round 2, and the resulting signature goes to the same verifier — which rejects it. The risk card then has an honest _k_-quorum (including the compromised participant) sign the same message and shows that verifier returning true. Both verdicts are computed in the browser.
+
+
 ## How to Run Locally
 
 ```bash
@@ -55,10 +62,20 @@ npm install
 npm run dev
 ```
 
-To run the test suite (GF256 arithmetic, Shamir round-trips, FROST signing and verification):
+To run the test suite (GF256 arithmetic, Shamir round-trips, FROST signing and verification,
+sub-threshold signing and the solo-forgery attempt):
 
 ```bash
 npm test
+```
+
+The browser gate runs the WCAG A/AA scan **and** functional assertions on the exhibits —
+the key badges, the partial-sum aggregation, and the real Ed25519 verification result on both
+the success and the failure path:
+
+```bash
+npx playwright install chromium
+npm run test:a11y
 ```
 
 No environment variables required. Everything runs in the browser with no backend.

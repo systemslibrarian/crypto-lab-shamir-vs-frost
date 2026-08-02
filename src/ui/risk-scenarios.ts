@@ -1,5 +1,20 @@
 // Risk scenario cards — what can an attacker gain at each stage of each protocol?
 
+import { runCompromiseScenario, type CompromiseScenario } from '../frost/attack.js';
+import { scalarToBytes } from '../frost/field.js';
+
+const te = new TextEncoder();
+
+function hexOf(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Compact label for a scalar: first and last bytes of its 32-byte encoding.
+function shortScalar(s: bigint): string {
+  const hx = hexOf(scalarToBytes(s));
+  return `${hx.slice(0, 6)}\u2026${hx.slice(-4)}`;
+}
+
 export function renderRiskScenarios(): HTMLElement {
   const section = document.createElement('section');
   section.className = 'section';
@@ -142,18 +157,26 @@ function buildReconstructInterceptCard(): HTMLElement {
   return card;
 }
 
-// Scenario 3: FROST participant compromised during signing
+// Scenario 3: FROST participant compromised during signing.
+//
+// This card runs the scenario rather than describing it: a fresh 3-of-5 key is
+// distributed, P2's real secret share is handed to the attacker, and both the
+// solo forgery and the honest quorum go to the real ed25519 verifier. The two
+// verdicts printed below are that verifier's answers.
 function buildFrostCompromiseCard(): HTMLElement {
+  const N = 5, K = 3, VICTIM = 2;
+  const MESSAGE = 'Transfer $1000 to Alice';
+
   const card = document.createElement('div');
   card.className = 'risk-card';
 
   card.appendChild(Object.assign(document.createElement('div'), {
     className: 'risk-title',
-    textContent: '3 · FROST: one participant compromised',
+    textContent: '3 \u00b7 FROST: one participant compromised',
   }));
   card.appendChild(Object.assign(document.createElement('p'), {
     className: 'risk-desc',
-    textContent: 'An attacker fully compromises one participant during a signing round. With k=3 of n=5, what do they gain?',
+    textContent: `An attacker fully compromises one participant during a signing round. With k=${K} of n=${N}, what do they gain? Press the button and the attacker actually tries.`,
   }));
 
   let shown = false;
@@ -163,43 +186,85 @@ function buildFrostCompromiseCard(): HTMLElement {
   card.appendChild(btn);
 
   const outcome = document.createElement('div');
+  outcome.setAttribute('role', 'status');
+  outcome.setAttribute('aria-live', 'polite');
   card.appendChild(outcome);
 
   btn.addEventListener('click', () => {
     shown = !shown;
     btn.textContent = shown ? 'Reset' : 'Compromise Participant 2';
     outcome.innerHTML = '';
-    if (shown) {
-      // Show participant grid
-      const grid = document.createElement('div');
-      grid.className = 'participant-grid';
-      const labels = ['P1\n(signing)', 'P2\n(⚠ compromised)', 'P3\n(signing)', 'P4\n(not signing)', 'P5\n(not signing)'];
-      for (let i = 0; i < 5; i++) {
-        const pc = document.createElement('div');
-        pc.className = `participant-card ${i === 1 ? 'compromised' : i < 3 ? 'signed' : ''}`;
-        pc.appendChild(Object.assign(document.createElement('div'), {
-          className: 'participant-icon',
-          textContent: i === 1 ? '☠️' : '👤',
-        }));
-        const lines = labels[i].split('\n');
-        pc.appendChild(Object.assign(document.createElement('div'), {
-          className: 'participant-label',
-          textContent: lines[0],
-        }));
-        pc.appendChild(Object.assign(document.createElement('div'), {
-          className: 'participant-sublabel',
-          textContent: lines[1] ?? '',
-        }));
-        grid.appendChild(pc);
-      }
-      outcome.appendChild(grid);
+    if (!shown) return;
 
-      outcome.appendChild(callout('safe', '✓',
-        'The attacker learns participant 2\'s signing share — a single value below the threshold. With k=3, they still need 2 more shares to do anything. The group public key is unaffected. Signing with participants 1 and 3 completes normally.'));
-
-      outcome.appendChild(callout('info', 'ℹ',
-        'Compare with Shamir: if an attacker intercepts the combiner during reconstruction, the game is over immediately. With FROST, losing one participant is a recoverable event — rotate that participant\'s share.'));
+    let scenario: CompromiseScenario;
+    try {
+      scenario = runCompromiseScenario(N, K, VICTIM, te.encode(MESSAGE));
+    } catch (e) {
+      outcome.appendChild(callout('warn', '\u2717', `Scenario failed to run: ${e}`));
+      return;
     }
+
+    const signers = new Set(scenario.honest.signerIndices);
+
+    const grid = document.createElement('div');
+    grid.className = 'participant-grid';
+    for (let i = 1; i <= N; i++) {
+      const compromised = i === VICTIM;
+      const signing = signers.has(i);
+      const pc = document.createElement('div');
+      pc.className = `participant-card ${compromised ? 'compromised' : signing ? 'signed' : ''}`;
+      pc.appendChild(Object.assign(document.createElement('div'), {
+        className: 'participant-icon',
+        textContent: compromised ? '\u2620\ufe0f' : '\ud83d\udc64',
+      }));
+      pc.appendChild(Object.assign(document.createElement('div'), {
+        className: 'participant-label',
+        textContent: `P${i}`,
+      }));
+      pc.appendChild(Object.assign(document.createElement('div'), {
+        className: 'participant-sublabel',
+        textContent: compromised ? '\u26a0 compromised' : signing ? '(signing)' : '(not signing)',
+      }));
+      grid.appendChild(pc);
+    }
+    outcome.appendChild(grid);
+
+    outcome.appendChild(callout('info', '\ud83d\ude08',
+      `The attacker holds P${VICTIM}'s real signing share s_${VICTIM} = ${shortScalar(scenario.stolenShare)} ` +
+      `and signs "${MESSAGE}" with it alone.`));
+
+    const forgedRow = document.createElement('div');
+    forgedRow.className = 'col mt-sm';
+    forgedRow.appendChild(Object.assign(document.createElement('span'), {
+      className: 'text-muted text-xs',
+      textContent: 'Signature produced by the stolen share alone (R || z, 64 bytes):',
+    }));
+    const forgedHex = document.createElement('code');
+    forgedHex.className = 'font-mono text-xs';
+    forgedHex.style.cssText = 'word-break: break-all; display:block;';
+    forgedHex.textContent = hexOf(scenario.forged.signature);
+    forgedRow.appendChild(forgedHex);
+    outcome.appendChild(forgedRow);
+
+    outcome.appendChild(callout(scenario.forged.verified ? 'warn' : 'safe',
+      scenario.forged.verified ? '\u26a0' : '\ud83d\udee1\ufe0f',
+      scenario.forged.verified
+        ? 'ed25519.verify() ACCEPTED the solo signature \u2014 that would be a break in this implementation.'
+        : `<strong>ed25519.verify() returned false.</strong> The share is genuine and the arithmetic ran to ` +
+          `completion \u2014 a real 64-byte signature came out \u2014 but one point cannot pin down a ` +
+          `degree-${K - 1} polynomial, so the aggregate scalar does not match the group public key. The attacker ` +
+          `still needs ${K - 1} more shares.`));
+
+    outcome.appendChild(callout(scenario.honest.verified ? 'safe' : 'warn',
+      scenario.honest.verified ? '\u2713' : '\u2717',
+      scenario.honest.verified
+        ? `The honest quorum P${scenario.honest.signerIndices.join(', P')} \u2014 including the compromised ` +
+          `P${VICTIM} \u2014 then signed the same message and <strong>ed25519.verify() returned true</strong>. ` +
+          `Losing one participant does not stop the group, and the group public key never changed.`
+        : 'The honest quorum failed to verify \u2014 that should not happen; check the console.'));
+
+    outcome.appendChild(callout('info', '\u2139',
+      'Compare with Shamir: if an attacker intercepts the combiner during reconstruction, the game is over immediately. With FROST, losing one participant is a recoverable event \u2014 rotate that participant\u2019s share.'));
   });
 
   return card;
