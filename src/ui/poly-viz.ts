@@ -69,7 +69,10 @@ export function renderPolyViz(
     svg.appendChild(secretDot);
 
     const secretLabel = makeSvgEl('text');
-    setAttrs(secretLabel, { x: cx + 7, y: cy + 4, 'font-size': '9', fill: 'var(--accent)' });
+    // --accent-text, not --accent: --accent is the shape fill (used for the dot
+    // just above) and measures 3.02:1 as ink on the panel. The lab already
+    // defines --accent-text for exactly this.
+    setAttrs(secretLabel, { x: cx + 7, y: cy + 4, 'font-size': '9', fill: 'var(--accent-text)' });
     secretLabel.textContent = `secret=0x${secretByte.toString(16).padStart(2, '0')}`;
     svg.appendChild(secretLabel);
   }
@@ -85,7 +88,14 @@ export function renderPolyViz(
 
     // Index label
     const lbl = makeSvgEl('text');
-    setAttrs(lbl, { x: cx, y: cy - 7, 'font-size': '9', fill: color, 'text-anchor': 'middle' });
+    setAttrs(lbl, {
+      x: cx,
+      y: cy - 7,
+      'font-size': '9',
+      // Ink, not the dot's fill — see the note above.
+      fill: s.selected ? 'var(--accent-text)' : 'var(--text-muted)',
+      'text-anchor': 'middle',
+    });
     lbl.textContent = `S${s.x}`;
     svg.appendChild(lbl);
   }

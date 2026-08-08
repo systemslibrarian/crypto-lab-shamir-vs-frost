@@ -129,7 +129,11 @@ body {
 /* ── Two-panel layout ── */
 .two-panel {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* `minmax(0, 1fr)`, not a bare `1fr`: a bare fr track keeps an automatic
+     minimum of min-content, so the nowrap 64-hex signature inside .mono-box
+     sized the column — and .mono-box's own `overflow-x: auto` never got the
+     chance to scroll because nothing constrained it. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--gap);
 }
 
@@ -151,7 +155,7 @@ body {
 .panel-frost  .panel-name { color: var(--key-safe); }
 
 @media (max-width: 640px) {
-  .two-panel { grid-template-columns: 1fr; }
+  .two-panel { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ── Head-to-head controls ── */
@@ -244,6 +248,17 @@ body {
 }
 .step:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 
+/* A step that is not yet available must still be READABLE. Fading the whole
+   block to 40% took its label to 2.11:1, its title to 3.32:1 and its
+   explanatory prose to 2.16:1 — and WCAG 1.4.3's exemption covers inactive UI
+   *components*, not the text telling you what the step will do. The locked
+   state is carried by `pointer-events: none` and `aria-disabled` (both still
+   set in JS); only the controls are dimmed. */
+/* No opacity dimming here: the controls inside a locked step are set
+   `disabled` in JS, which both communicates the state to assistive tech and
+   puts them inside 1.4.3's inactive-component exemption. Fading them as well
+   took the primary button's label to 2.69:1 for no added signal. */
+
 .step-label {
   font-size: 0.7rem;
   font-weight: 800;
@@ -283,7 +298,14 @@ body {
   color: var(--text-on-accent);
   border-color: var(--accent);
 }
-.btn-primary:not(:disabled):hover { opacity: 0.82; }
+/* Darken the fill on hover rather than fading the whole button. `opacity` fades
+   the accent background AND the label on it together, so the two converge: this
+   button measured 5.25:1 at rest and 4.49:1 while hovered — harder to read
+   exactly when you point at it. */
+.btn-primary:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--accent) 82%, black);
+  border-color: color-mix(in srgb, var(--accent) 82%, black);
+}
 
 .btn-ghost {
   background: transparent;
@@ -631,7 +653,10 @@ body {
   bottom: 125%;
   z-index: 50;
   width: max-content;
-  max-width: 260px;
+  /* Bounded by the viewport, not just by 260px: anchored `left: 0` off a term
+     near the right edge, a fixed 260px bubble pushed the document sideways at
+     380px whenever it was actually shown (WCAG 1.4.10). */
+  max-width: min(260px, calc(100vw - 2rem));
   background-color: var(--surface);
   color: var(--text);
   border: 1px solid var(--accent);
@@ -641,16 +666,33 @@ body {
   font-weight: 400;
   line-height: 1.45;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s;
+  /* `display: none`, not `visibility: hidden`: a hidden-but-laid-out box still
+     contributes to the document's scroll width, and this 260px bubble anchored
+     off a term near the right edge pushed the page sideways at BOTH widths
+     (WCAG 1.4.10) — an overflow caused by an element nobody can see. Taking it
+     out of flow costs the 120ms fade. */
+  display: none;
   pointer-events: none;
 }
 .glossary-term:hover .glossary-bubble,
 .glossary-term:focus .glossary-bubble,
 .glossary-term:focus-visible .glossary-bubble {
-  opacity: 1;
-  visibility: visible;
+  display: block;
+}
+
+/* On a phone the bubble cannot be anchored to the term at all: `left: 0` off a
+   term near the right edge puts a 260px bubble past the viewport no matter how
+   its max-width is capped, and that extends the document (WCAG 1.4.10). Pin it
+   to the viewport instead, where it always fits. */
+@media (max-width: 640px) {
+  .glossary-bubble {
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    width: auto;
+    max-width: none;
+  }
 }
 
 /* ── FROST aggregation viz (partial sigs → one aggregate) ── */
@@ -769,7 +811,14 @@ body {
   from { opacity: 0; transform: translateY(3px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.fade-in { animation: fadeIn 0.25s ease; }
+/* Scoped to `no-preference`, not merely cancelled in the reduced-motion block
+   below: that block names three classes and missed this one, so callouts kept
+   ramping `opacity: 0 -> 1` for preference-setting visitors — and a scan landing
+   inside the ramp read the safe-callout text at 1.68:1. Scoping removes the ramp
+   entirely rather than relying on a cancellation list staying complete. */
+@media (prefers-reduced-motion: no-preference) {
+  .fade-in { animation: fadeIn 0.25s ease; }
+}
 
 /* Range number input side-by-side */
 .num-input { width: 52px; }

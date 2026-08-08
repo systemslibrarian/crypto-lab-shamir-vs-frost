@@ -8,6 +8,19 @@ import { renderPolyViz } from './poly-viz.js';
 import { renderInterpViz, teachingY } from './interp-viz.js';
 import { withGlossary } from './glossary.js';
 
+/** Locked steps disable their controls outright: that is what communicates the
+ *  state to assistive tech, and it is what puts them inside WCAG 1.4.3's
+ *  inactive-component exemption. Dimming alone did neither. */
+function setControlsDisabled(root: HTMLElement, disabled: boolean): void {
+  root
+    .querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+      'button, input, select, textarea'
+    )
+    .forEach((el) => {
+      el.disabled = disabled;
+    });
+}
+
 const te = new TextEncoder();
 const td = new TextDecoder();
 
@@ -168,7 +181,6 @@ export function renderShamirPanel(): PanelHandle {
   // ── Step 2: Reconstruct ──────────────────────────────────────────────────
   const step2 = document.createElement('div');
   step2.className = 'step';
-  step2.style.opacity = '0.4';
   step2.style.pointerEvents = 'none';
 
   const step2Label = document.createElement('div');
@@ -213,12 +225,15 @@ export function renderShamirPanel(): PanelHandle {
   step2.appendChild(interpWrap);
   step2.appendChild(reconstructBtn);
   step2.appendChild(reconstructResult);
+  // Locked only once the step is fully built: disabling its controls before
+  // they are appended disables nothing.
+  step2.classList.add('step--locked');
+  setControlsDisabled(step2, true);
   card.appendChild(step2);
 
   // ── Step 3: Sign ─────────────────────────────────────────────────────────
   const step3 = document.createElement('div');
   step3.className = 'step';
-  step3.style.opacity = '0.4';
   step3.style.pointerEvents = 'none';
 
   const step3Label = document.createElement('div');
@@ -259,6 +274,10 @@ export function renderShamirPanel(): PanelHandle {
   step3.appendChild(msgFieldS);
   step3.appendChild(signBtnS);
   step3.appendChild(signResultS);
+  // Locked only once the step is fully built: disabling its controls before
+  // they are appended disables nothing.
+  step3.classList.add('step--locked');
+  setControlsDisabled(step3, true);
   card.appendChild(step3);
 
   // ── Attacker overlay (driven from the page-level "Compromise" control) ─────
@@ -408,7 +427,8 @@ export function renderShamirPanel(): PanelHandle {
     ));
 
     // Enable step 2
-    step2.style.opacity = '1';
+    step2.classList.remove('step--locked');
+    setControlsDisabled(step2, false);
     step2.style.pointerEvents = '';
     updateReconstructBtn();
     renderInterp(false);
@@ -498,7 +518,8 @@ export function renderShamirPanel(): PanelHandle {
     reconstructResult.appendChild(row);
 
     // Enable step 3
-    step3.style.opacity = '1';
+    step3.classList.remove('step--locked');
+    setControlsDisabled(step3, false);
     step3.style.pointerEvents = '';
   });
 
@@ -566,9 +587,7 @@ export function renderShamirPanel(): PanelHandle {
     attackResult.style.display = 'none';
     kWarnEl.style.display = 'none';
     reconstructBtn.disabled = true;
-    step2.style.opacity = '0.4';
     step2.style.pointerEvents = 'none';
-    step3.style.opacity = '0.4';
     step3.style.pointerEvents = 'none';
     setBadge('neutral');
   }

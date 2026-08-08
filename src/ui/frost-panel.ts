@@ -42,16 +42,31 @@ function inlineErr(msg: string): HTMLElement {
   return callout('warn', '✗', msg);
 }
 
+/** Locked steps disable their controls outright: that is what communicates the
+ *  state to assistive tech, and it is what puts them inside WCAG 1.4.3's
+ *  inactive-component exemption. Dimming alone did neither. */
+function setControlsDisabled(root: HTMLElement, disabled: boolean): void {
+  root
+    .querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+      'button, input, select, textarea'
+    )
+    .forEach((el) => {
+      el.disabled = disabled;
+    });
+}
+
 function lockStep(step: HTMLElement) {
-  step.style.opacity = '0.4';
+  step.classList.add('step--locked');
   step.style.pointerEvents = 'none';
   step.setAttribute('aria-disabled', 'true');
+  setControlsDisabled(step, true);
 }
 
 function unlockStep(step: HTMLElement) {
-  step.style.opacity = '1';
+  step.classList.remove('step--locked');
   step.style.pointerEvents = '';
   step.removeAttribute('aria-disabled');
+  setControlsDisabled(step, false);
 }
 
 export function renderFrostPanel(): PanelHandle {
@@ -142,7 +157,6 @@ export function renderFrostPanel(): PanelHandle {
   // ── Step 2: Round 1 commitments ──────────────────────────────────────────
   const step2 = document.createElement('div');
   step2.className = 'step';
-  lockStep(step2);
 
   step2.appendChild(Object.assign(document.createElement('div'), { className: 'step-label', textContent: 'Step 2 — Round 1' }));
   step2.appendChild(Object.assign(document.createElement('div'), { className: 'step-title', textContent: 'Generate commitments' }));
@@ -166,12 +180,14 @@ export function renderFrostPanel(): PanelHandle {
   const commitResult = document.createElement('div');
   step2.appendChild(commitResult);
 
+  // Locked only once the step is fully built: lockStep disables the controls
+  // inside it, so calling it before they are appended disables nothing.
+  lockStep(step2);
   card.appendChild(step2);
 
   // ── Step 3: Round 2 signing ──────────────────────────────────────────────
   const step3 = document.createElement('div');
   step3.className = 'step';
-  lockStep(step3);
 
   step3.appendChild(Object.assign(document.createElement('div'), { className: 'step-label', textContent: 'Step 3 — Round 2' }));
   step3.appendChild(Object.assign(document.createElement('div'), { className: 'step-title', textContent: 'Collaborative signing' }));
@@ -224,6 +240,9 @@ export function renderFrostPanel(): PanelHandle {
   signResult.setAttribute('aria-live', 'polite');
   step3.appendChild(signResult);
 
+  // Locked only once the step is fully built: lockStep disables the controls
+  // inside it, so calling it before they are appended disables nothing.
+  lockStep(step3);
   card.appendChild(step3);
 
   // ── Attacker overlay (driven from the page-level "Compromise" control) ─────
@@ -398,7 +417,6 @@ export function renderFrostPanel(): PanelHandle {
     // Enable step 2, reset downstream
     unlockStep(step2);
     commitResult.innerHTML = '';
-    lockStep(step3);
     signResult.innerHTML = '';
     signErr.style.display = 'none';
   });
@@ -548,8 +566,6 @@ export function renderFrostPanel(): PanelHandle {
     attackResult.innerHTML = '';
     attackResult.style.display = 'none';
     signBtn.disabled = true;
-    lockStep(step2);
-    lockStep(step3);
     badge.setState('safe');
     notify('safe');
   }
