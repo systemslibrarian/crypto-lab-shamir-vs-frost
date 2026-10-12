@@ -1,6 +1,6 @@
 // FROST signature verification using @noble/curves (same math as WebCrypto Ed25519).
 
-import { ed25519 } from '@noble/curves/ed25519';
+import { ed25519 } from '@noble/curves/ed25519.js';
 import type { AggSig } from './types.js';
 
 // Verify the FROST aggregate signature against the group public key and message.

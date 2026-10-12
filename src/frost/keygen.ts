@@ -1,12 +1,12 @@
 // FROST key generation — trusted dealer model.
 // [extension] Replace dealerKeyGen with a Pedersen DKG protocol to remove the trusted-dealer assumption.
 
-import { ed25519 } from '@noble/curves/ed25519';
-import { sha512 } from '@noble/hashes/sha512';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { sha512 } from '@noble/hashes/sha2.js';
 import { bytesToScalar, scalarShamirSplit } from './field.js';
 import type { DealerResult } from './types.js';
 
-const G = ed25519.ExtendedPoint.BASE;
+const G = ed25519.Point.BASE;
 
 // Expand a raw 32-byte Ed25519 private key to its signing scalar and public key.
 // This matches the Ed25519 key derivation (RFC 8032 §5.1.5).
@@ -18,7 +18,7 @@ function expandPrivateKey(priv: Uint8Array): { scalar: bigint; publicKeyBytes: U
   a[31] &= 63;
   a[31] |= 64;
   const scalar = bytesToScalar(a); // interpret as LE bigint, mod l
-  const publicKeyBytes = G.multiply(scalar).toRawBytes();
+  const publicKeyBytes = G.multiply(scalar).toBytes();
   return { scalar, publicKeyBytes };
 }
 
@@ -28,7 +28,7 @@ export function dealerKeyGen(n: number, k: number): DealerResult {
   if (n > 10) throw new Error('n capped at 10 for this demo');
 
   // Generate the group private key and derive its public key
-  const priv = ed25519.utils.randomPrivateKey();
+  const priv = ed25519.utils.randomSecretKey();
   const { scalar: groupSecret, publicKeyBytes: groupPublicKey } = expandPrivateKey(priv);
 
   // Split the group secret scalar across n participants using Shamir in Z_l
@@ -37,7 +37,7 @@ export function dealerKeyGen(n: number, k: number): DealerResult {
   const participants = shareScalars.map((s, i) => ({
     index: i + 1,
     secretShare: s,
-    publicShare: G.multiply(s).toRawBytes(), // S_i = s_i * G
+    publicShare: G.multiply(s).toBytes(), // S_i = s_i * G
   }));
 
   return { groupPublicKey, participants, n, k };

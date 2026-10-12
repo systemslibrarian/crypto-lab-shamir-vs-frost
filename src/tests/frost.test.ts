@@ -8,6 +8,11 @@ import { scalarShamirSplit, lagrangeCoeff, fieldAdd, fieldMul, L } from '../fros
 
 const te = new TextEncoder();
 
+async function nativeVerify(signature: Uint8Array, publicKey: Uint8Array, message: Uint8Array): Promise<boolean> {
+  const key = await crypto.subtle.importKey('raw', new Uint8Array(publicKey).buffer, 'Ed25519', false, ['verify']);
+  return crypto.subtle.verify('Ed25519', key, new Uint8Array(signature).buffer, new Uint8Array(message).buffer);
+}
+
 describe('FROST field arithmetic (Z_l)', () => {
   it('fieldAdd is commutative', () => {
     const a = 123456789n, b = 987654321n;
@@ -54,7 +59,7 @@ describe('FROST field arithmetic (Z_l)', () => {
 });
 
 describe('FROST signing protocol — n=3, k=2', () => {
-  it('full signing flow verifies', () => {
+  it('full signing flow verifies', async () => {
     const n = 3, k = 2;
     const msg = te.encode('Transfer $1000 to Alice');
 
@@ -98,6 +103,7 @@ describe('FROST signing protocol — n=3, k=2', () => {
     // Verify
     const valid = verifySignature(aggSig, dealer.groupPublicKey, msg);
     expect(valid).toBe(true);
+    expect(await nativeVerify(aggSig.signature, dealer.groupPublicKey, msg)).toBe(true);
   });
 
   it('different signer subset (participants 1 and 3) also produces valid signature', () => {
@@ -134,7 +140,7 @@ describe('FROST signing protocol — n=3, k=2', () => {
     expect(verifySignature(aggSig, dealer.groupPublicKey, msg)).toBe(true);
   });
 
-  it('corrupted partial signature produces invalid aggregate', () => {
+  it('corrupted partial signature produces invalid aggregate', async () => {
     const msg = te.encode('Corrupted sig test');
     const dealer = dealerKeyGen(3, 2);
 
@@ -170,6 +176,7 @@ describe('FROST signing protocol — n=3, k=2', () => {
     const aggSig = aggregate(partialSigs, signingCommitments, dealer.groupPublicKey, msg);
     // Corrupted partial sig → invalid aggregate → verify returns false
     expect(verifySignature(aggSig, dealer.groupPublicKey, msg)).toBe(false);
+    expect(await nativeVerify(aggSig.signature, dealer.groupPublicKey, msg)).toBe(false);
   });
 
   it('aggregate output does not contain a reconstructed secret key property', () => {
