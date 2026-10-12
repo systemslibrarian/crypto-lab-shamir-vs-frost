@@ -1,10 +1,10 @@
 // FROST Round 1 — each participant generates a nonce pair and broadcasts commitments.
 
-import { ed25519 } from '@noble/curves/ed25519';
+import { ed25519 } from '@noble/curves/ed25519.js';
 import { randomScalar } from './field.js';
 import type { Nonces, Commitment } from './types.js';
 
-const G = ed25519.ExtendedPoint.BASE;
+const G = ed25519.Point.BASE;
 
 export function generateCommitment(participantIndex: number): {
   nonces: Nonces;
@@ -13,8 +13,8 @@ export function generateCommitment(participantIndex: number): {
   const d = randomScalar(); // hiding nonce
   const e = randomScalar(); // binding nonce
 
-  const D = G.multiply(d).toRawBytes();
-  const E = G.multiply(e).toRawBytes();
+  const D = G.multiply(d).toBytes();
+  const E = G.multiply(e).toBytes();
 
   return {
     nonces: { d, e },

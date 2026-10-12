@@ -69,6 +69,12 @@ sub-threshold signing and the solo-forgery attempt):
 npm test
 ```
 
+The suite includes the pure-Ed25519 signature vector in RFC 8032 §7.1 and
+malformed-input rejection controls. Native WebCrypto independently verifies a
+real threshold aggregate and rejects an aggregate with a corrupted partial
+signature, alongside the lab's Noble-backed verifier. These checks do not make
+the simplified binding-factor construction RFC 9591 conformant.
+
 The browser gate runs the WCAG A/AA scan **and** functional assertions on the exhibits —
 the key badges, the partial-sum aggregation, and the real Ed25519 verification result on both
 the success and the failure path:
