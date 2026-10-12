@@ -93,3 +93,7 @@ One of 170+ live browser demos at [crypto-lab.systemslibrarian.dev](https://cryp
 ---
 
 *"Whether you eat or drink, or whatever you do, do all to the glory of God." — 1 Corinthians 10:31*
+
+## Adaptive-corruption research context
+
+The live demo now includes an **Adaptive corruption** section with dated primary sources, the `T=t+1` notation conversion, baseline and large-roster examples, and explicit proof/attack/executable-demo boundaries. A valid signature or failed single-share forgery is not an adaptive-security proof. See [the 2025 proof](https://eprint.iacr.org/2025/1061), [the September 2026 attack preprint](https://eprint.iacr.org/2026/2126), and [the contextualization preprint](https://eprint.iacr.org/2026/2203). This addition does not change the signing engine or nonce/binding controls.

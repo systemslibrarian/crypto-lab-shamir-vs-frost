@@ -844,3 +844,7 @@ body {
     min-height: 44px;
   }
 }
+
+.adaptive-research p, .adaptive-research li { line-height: 1.7; margin-top: .8rem; }
+.adaptive-research ul { padding-left: 1.4rem; }
+.adaptive-research a { color: var(--accent-text); text-decoration: underline; overflow-wrap: anywhere; }

@@ -1,4 +1,5 @@
 import './styles.css';
+import { renderAdaptiveResearch } from './ui/adaptive-research.js';
 import { renderComparisonTable } from './ui/comparison-table.js';
 import { renderShamirPanel } from './ui/shamir-panel.js';
 import { renderFrostPanel } from './ui/frost-panel.js';
@@ -124,3 +125,5 @@ app.appendChild(renderRiskScenarios());
 
 // ── Section 5: Decision guide ────────────────────────────────────────────────
 app.appendChild(renderDecisionGuide());
+
+app.appendChild(renderAdaptiveResearch());
