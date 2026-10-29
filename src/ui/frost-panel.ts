@@ -650,7 +650,10 @@ function makeParticipantCard(index: number, mode: 'distributed' | 'signing'): HT
   if (mode === 'signing') {
     card.setAttribute('role', 'checkbox');
     card.setAttribute('aria-checked', 'false');
-    card.setAttribute('aria-label', `Participant ${index}`);
+    // No aria-label: like the Shamir share card, this one shows more than a
+    // participant number, and axe 4.14 compares the accessible name against
+    // everything a SIGHTED user sees (label-content-name-mismatch, WCAG
+    // 2.5.3 Label in Name). The card's own content is its name.
   }
 
   const icons = ['👤', '👥', '🧑', '👩', '🧔', '👨‍💻', '👩‍💻', '🧑‍💻', '🕵️', '🛡️'];

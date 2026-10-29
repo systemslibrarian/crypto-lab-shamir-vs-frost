@@ -375,7 +375,12 @@ export function renderShamirPanel(): PanelHandle {
       sc.setAttribute('tabindex', '0');
       sc.setAttribute('role', 'checkbox');
       sc.setAttribute('aria-checked', 'false');
-      sc.setAttribute('aria-label', `Share ${share.x}`);
+      // No aria-label: the card shows its label, its x and a hex preview, and
+      // axe 4.14 compares the accessible name against everything a SIGHTED
+      // user sees (label-content-name-mismatch, WCAG 2.5.3 Label in Name),
+      // so naming it "Share 1" left the x and the hex outside the name. The
+      // content is the name now, and the title below still carries the full
+      // index and first byte.
       sc.title = `Share index x=${share.x}, y[0]=0x${share.y[0].toString(16).padStart(2,'0')}`;
 
       const lbl = document.createElement('div');
