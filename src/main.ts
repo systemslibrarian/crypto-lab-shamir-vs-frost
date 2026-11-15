@@ -20,7 +20,7 @@ hero.innerHTML = `
   </div>
   <aside class="cl-hero-why" aria-label="Why it matters">
     <span class="cl-hero-why-label">WHY IT MATTERS</span>
-    <p class="cl-hero-why-text">The instant a key is reconstructed, that machine becomes a single point of total compromise. Threshold signing removes that window entirely — the whole reason it now guards custody wallets, root CAs, and validator keys.</p>
+    <p class="cl-hero-why-text">The instant a key is reconstructed, that machine becomes a single point of total compromise. Threshold signing removes that window from signing — the whole reason it now guards custody wallets, root CAs, and validator keys.</p>
   </aside>
 `;
 app.appendChild(hero);
