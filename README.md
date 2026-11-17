@@ -88,7 +88,7 @@ No environment variables required. Everything runs in the browser with no backen
 
 ## Part of the Crypto-Lab Suite
 
-One of 251 live browser demos at [crypto-lab.systemslibrarian.dev](https://crypto-lab.systemslibrarian.dev/) — spanning Atbash (600 BCE) through NIST FIPS 203/204/205 (2024).
+One of the live browser demos at [crypto-lab.systemslibrarian.dev](https://crypto-lab.systemslibrarian.dev/) — spanning Atbash (600 BCE) through NIST FIPS 203/204/205 (2024).
 
 ---
 
