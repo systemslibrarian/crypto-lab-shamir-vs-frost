@@ -7,7 +7,7 @@ import {
   soloForgeAttempt,
 } from '../frost/attack.js';
 import type { Commitment, Nonces } from '../frost/types.js';
-import { split, reconstruct } from '../shamir/shamir.js';
+import { reconstruct } from '../shamir/shamir.js';
 
 const te = new TextEncoder();
 const MESSAGE = te.encode('Transfer $1000 to Alice');
@@ -110,28 +110,22 @@ describe('runCompromiseScenario', () => {
 });
 
 describe('Shamir reconstruction below the threshold', () => {
-  it('returns bytes that are not the secret', () => {
-    const secret = te.encode('correct horse battery');
-    const shares = split(secret, 5, 3);
+  const share = (x: number, y: number) => ({ x, y: Uint8Array.of(y) });
+  const pair = [share(1, 0x46), share(2, 0x4f)];
 
-    const short = reconstruct(shares.slice(0, 2));
-    expect(short).toHaveLength(secret.length);
-    expect(Array.from(short)).not.toEqual(Array.from(secret));
-
-    const full = reconstruct(shares.slice(0, 3));
-    expect(Array.from(full)).toEqual(Array.from(secret));
+  it('the candidate can match or differ from the true secret with identical observed shares', () => {
+    expect(reconstruct(pair)).toEqual(Uint8Array.of(0x41));
+    expect(reconstruct([...pair, share(3, 0x48)])).toEqual(Uint8Array.of(0x41));
+    expect(reconstruct([...pair, share(3, 0x4a)])).toEqual(Uint8Array.of(0x43));
   });
 
-  it('gives a different wrong answer for each sub-threshold subset', () => {
-    const secret = te.encode('correct horse battery');
-    const shares = split(secret, 5, 3);
-
-    const a = reconstruct([shares[0], shares[1]]);
-    const b = reconstruct([shares[0], shares[2]]);
-
-    // Both are wrong, and nothing about either one signals that it is wrong.
-    expect(Array.from(a)).not.toEqual(Array.from(secret));
-    expect(Array.from(b)).not.toEqual(Array.from(secret));
-    expect(Array.from(a)).not.toEqual(Array.from(b));
+  it('different short subsets can disagree while a quorum uniquely reconstructs', () => {
+    const third = share(3, 0x4a);
+    const fromFirstTwo = reconstruct(pair);
+    const fromFirstAndThird = reconstruct([pair[0], third]);
+    const secret = reconstruct([...pair, third]);
+    expect(fromFirstTwo).not.toEqual(secret);
+    expect(fromFirstAndThird).not.toEqual(secret);
+    expect(fromFirstTwo).not.toEqual(fromFirstAndThird);
   });
 });

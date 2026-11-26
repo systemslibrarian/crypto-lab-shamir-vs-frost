@@ -1,5 +1,5 @@
 // Shamir's Secret Sharing over GF(256).
-// Splits a secret (Uint8Array, up to 32 bytes) into n shares; any k reconstruct it.
+// Splits a byte string into n shares; any k reconstruct it.
 // Each secret byte is treated independently; the polynomial is over GF(256).
 
 import { gfAdd, gfMul, gfDiv, gfPolyEval } from './gf256.js';
@@ -17,7 +17,7 @@ export function split(secret: Uint8Array, n: number, k: number): Share[] {
   }));
 
   for (let b = 0; b < secret.length; b++) {
-    // Random polynomial of degree k-1: coeffs[0] = secret[b]
+    // Random polynomial of degree at most k-1: coeffs[0] = secret[b]
     const coeffs = new Uint8Array(k);
     coeffs[0] = secret[b];
     crypto.getRandomValues(coeffs.subarray(1));

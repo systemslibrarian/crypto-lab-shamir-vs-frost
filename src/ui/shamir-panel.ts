@@ -22,7 +22,7 @@ function setControlsDisabled(root: HTMLElement, disabled: boolean): void {
 }
 
 const te = new TextEncoder();
-const td = new TextDecoder();
+const td = new TextDecoder('utf-8', { ignoreBOM: true });
 
 function hexOf(bytes: Uint8Array): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -65,6 +65,7 @@ export function renderShamirPanel(): PanelHandle {
   // match this — not whatever the k input reads now — since the user can edit
   // the input after splitting (and validateNK clamps k to n at split time).
   let activeK = 0;
+  let macVersion = 0;
 
   const badge = createKeyBadge('neutral');
   const stateListeners: Array<(s: KeyState) => void> = [];
@@ -104,11 +105,10 @@ export function renderShamirPanel(): PanelHandle {
   secretField.className = 'field';
   const secretLabel = document.createElement('label');
   secretLabel.htmlFor = 'shamir-secret';
-  secretLabel.textContent = 'Secret (up to 32 chars)';
+  secretLabel.textContent = 'Secret (up to 32 Unicode code points)';
   const secretInput = document.createElement('input');
   secretInput.type = 'text';
   secretInput.id = 'shamir-secret';
-  secretInput.maxLength = 32;
   secretInput.value = 'correct horse battery';
   secretField.appendChild(secretLabel);
   secretField.appendChild(secretInput);
@@ -342,9 +342,9 @@ export function renderShamirPanel(): PanelHandle {
     const { n, k, valid } = validateNK();
     if (!valid) return;
 
-    const secretText = secretInput.value.trim();
+    const secretText = secretInput.value;
     if (!secretText) { alert('Secret cannot be empty'); return; }
-    if (secretText.length > 32) { alert('Secret capped at 32 characters'); return; }
+    if (Array.from(secretText).length > 32) { alert('Enter at most 32 Unicode code points.'); return; }
 
     const secretBytes = te.encode(secretText);
 
@@ -354,6 +354,9 @@ export function renderShamirPanel(): PanelHandle {
       alert(String(e));
       return;
     }
+    macVersion++;
+    step3.classList.add('step--locked');
+    setControlsDisabled(step3, true);
     originalSecret = secretBytes;
     activeK = k; // shares now require exactly k of n to reconstruct
 
@@ -453,36 +456,34 @@ export function renderShamirPanel(): PanelHandle {
       return;
     }
 
-    // Grade the result against the secret that was actually split. With fewer
-    // than k shares interpolation still returns bytes — they are simply the
-    // wrong ones, and nothing in them says so.
+    // Only the dealer’s retained original lets this page compare a candidate with the secret.
     const matches = originalSecret !== null
       && candidate.length === originalSecret.length
       && candidate.every((b, i) => b === originalSecret![i]);
 
     if (selected.length < activeK) {
-      // Nothing was recovered, so the key never entered memory: the badge stays put.
+      // A sub-threshold candidate does not authorize use of a reconstructed key.
       renderInterp(false);
       reconstructResult.innerHTML = '';
       reconstructResult.appendChild(callout('safe', '🛡️',
         `Interpolation ran on ${selected.length} of k=${activeK} points and returned ${candidate.length} bytes — ` +
         `it always returns something. Compared against the real secret byte-for-byte: ` +
-        `<strong>${matches ? 'MATCH (should not happen below k)' : 'no match'}</strong>. ` +
-        `Every one of the 256^${candidate.length} possible secrets is equally consistent with the shares you hold, ` +
-        `so the bytes below carry no information about the real one — and nothing in them tells you that.`));
+        `<strong>${matches ? 'matches by chance' : 'no match'}</strong>. ` +
+        `For this byte length, every one of the 256^${candidate.length} possible secrets is equally consistent with the shares you hold, ` +
+        `so this candidate is unconfirmed. Only the dealer’s saved original makes the comparison possible.`));
 
-      const wrongRow = document.createElement('div');
-      wrongRow.className = 'col mt-sm';
-      wrongRow.appendChild(Object.assign(document.createElement('span'), {
+      const candidateRow = document.createElement('div');
+      candidateRow.className = 'col mt-sm';
+      candidateRow.appendChild(Object.assign(document.createElement('span'), {
         className: 'text-muted text-xs',
         textContent: `What ${selected.length} shares actually interpolate to (hex):`,
       }));
-      wrongRow.appendChild(monoBox(hexOf(candidate)));
-      wrongRow.appendChild(Object.assign(document.createElement('p'), {
+      candidateRow.appendChild(monoBox(hexOf(candidate)));
+      candidateRow.appendChild(Object.assign(document.createElement('p'), {
         className: 'text-xs text-muted mt-sm',
         textContent: `Decoded as text: "${td.decode(candidate)}"  ·  Select ${activeK - selected.length} more share${activeK - selected.length === 1 ? '' : 's'} and reconstruct again.`,
       }));
-      reconstructResult.appendChild(wrongRow);
+      reconstructResult.appendChild(candidateRow);
       return;
     }
 
@@ -534,6 +535,7 @@ export function renderShamirPanel(): PanelHandle {
 
     const msg = msgInputS.value;
     if (!msg) { alert('Message cannot be empty'); return; }
+    const version = ++macVersion;
     const msgBytes = te.encode(msg);
 
     try {
@@ -545,6 +547,7 @@ export function renderShamirPanel(): PanelHandle {
         false, ['sign'],
       );
       const sigBuf = await crypto.subtle.sign('HMAC', key, msgBytes);
+      if (version !== macVersion) return;
       const sigHex = hexOf(new Uint8Array(sigBuf));
 
       signResultS.innerHTML = '';
@@ -575,6 +578,11 @@ export function renderShamirPanel(): PanelHandle {
 
   // ── Panel control API (used by the page for Run-both / Reset / Compromise) ──
   function reset() {
+    macVersion++;
+    for (const step of [step2, step3]) {
+      step.classList.add('step--locked');
+      setControlsDisabled(step, true);
+    }
     shares = [];
     activeK = 0;
     selectedIndices.clear();
@@ -597,6 +605,12 @@ export function renderShamirPanel(): PanelHandle {
     setBadge('neutral');
   }
 
+  for (const input of [secretInput, nInput, kInput]) input.addEventListener('input', reset);
+  msgInputS.addEventListener('input', () => {
+    macVersion++;
+    signResultS.replaceChildren();
+  });
+
   async function runAll() {
     reset();
     splitBtn.click();
@@ -611,9 +625,10 @@ export function renderShamirPanel(): PanelHandle {
     attackResult.style.display = 'block';
     attackResult.innerHTML = '';
     if (reconstructedSecret) {
-      attackResult.appendChild(callout('danger', '😈',
-        `Attacker compromised this machine while the key sat in memory and exfiltrated the FULL secret: ` +
-        `"${td.decode(reconstructedSecret)}". They can now forge any signature, forever. Game over.`));
+      const exposure = callout('danger', '😈',
+        'This classroom scenario displays the reconstructed secret held by the combiner. Anyone holding these bytes can compute HMAC tags under this key.');
+      exposure.appendChild(monoBox(td.decode(reconstructedSecret)));
+      attackResult.appendChild(exposure);
     } else {
       attackResult.appendChild(callout('info', '😈',
         'Attacker compromised this machine, but the secret has not been reconstructed yet. ' +

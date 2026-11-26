@@ -24,12 +24,14 @@ describe('Shamir Secret Sharing', () => {
     expect(bytesToStr(recovered)).toBe('all shares work');
   });
 
-  it('k-1 shares do not recover the secret', () => {
-    const secret = strToBytes('secret value');
-    const shares = split(secret, 5, 3);
-    // 2 shares (< k=3) reconstruct the wrong value
-    const wrong = reconstruct([shares[0], shares[1]]);
-    expect(bytesToStr(wrong)).not.toBe('secret value');
+  it('the same two shares are consistent with every possible secret byte at threshold three', () => {
+    const pair = [{ x: 1, y: Uint8Array.of(0x46) }, { x: 2, y: Uint8Array.of(0x4f) }];
+    expect(reconstruct(pair)).toEqual(Uint8Array.of(0x41));
+    const candidates = new Set<number>();
+    for (let y = 0; y < 256; y++) {
+      candidates.add(reconstruct([...pair, { x: 3, y: Uint8Array.of(y) }])[0]);
+    }
+    expect(candidates.size).toBe(256);
   });
 
   it('any combination of k shares recovers the secret', () => {

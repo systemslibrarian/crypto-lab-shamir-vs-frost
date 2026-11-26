@@ -322,6 +322,15 @@ export function renderFrostPanel(): PanelHandle {
     });
   }
 
+  function clearSigningResult() {
+    signResult.replaceChildren();
+    signErr.style.display = 'none';
+    aggViz.replaceChildren();
+    aggViz.style.display = 'none';
+  }
+
+  msgInput.addEventListener('input', clearSigningResult);
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   function getK(): number { return Math.min(10, Math.max(2, parseInt(kInput.value) || 3)); }
   function getN(): number { return Math.min(10, Math.max(2, parseInt(nInput.value) || 5)); }
@@ -330,7 +339,7 @@ export function renderFrostPanel(): PanelHandle {
   // would hide the very property this panel argues for. The button stays live
   // from one signer up, and the real verifier passes judgement.
   function updateSignBtn() {
-    const k = getK();
+    const k = dealer?.k ?? getK();
     const count = selectedSigners.size;
     signBtn.disabled = count === 0;
     signBtn.textContent = count > 0 && count < k ? `Sign anyway (${count} of k=${k})` : 'Sign';
@@ -357,6 +366,7 @@ export function renderFrostPanel(): PanelHandle {
           pc.classList.add('selected');
           pc.setAttribute('aria-checked', 'true');
         }
+        clearSigningResult();
         updateSignBtn();
       };
       pc.addEventListener('click', toggle);
@@ -403,7 +413,7 @@ export function renderFrostPanel(): PanelHandle {
 
     distributeResult.innerHTML = '';
     distributeResult.appendChild(callout('safe', '✓',
-      `Key shares distributed to ${n} participants. The dealer has destroyed the full private key. Each participant holds only their own share.`));
+      `Key shares distributed to ${n} participants. This demo uses a trusted dealer to generate and split the secret. Signing uses the distributed shares. Each participant holds only their own share.`));
 
     const pubKeyRow = document.createElement('div');
     pubKeyRow.className = 'col mt-sm';
@@ -415,6 +425,9 @@ export function renderFrostPanel(): PanelHandle {
     distributeResult.appendChild(pubKeyRow);
 
     // Enable step 2, reset downstream
+    clearSigningResult();
+    signerGrid.replaceChildren();
+    lockStep(step3);
     unlockStep(step2);
     commitResult.innerHTML = '';
     signResult.innerHTML = '';
@@ -422,12 +435,11 @@ export function renderFrostPanel(): PanelHandle {
   });
 
   // ── Commit handler ────────────────────────────────────────────────────────
-  commitBtn.addEventListener('click', () => {
-    if (!dealer) return;
+  function generateRoundOne(group: DealerResult) {
     noncesMap.clear();
     commitmentsMap.clear();
 
-    for (const p of dealer.participants) {
+    for (const p of group.participants) {
       const { nonces, commitment } = generateCommitment(p.index);
       noncesMap.set(p.index, nonces);
       commitmentsMap.set(p.index, commitment);
@@ -442,7 +454,7 @@ export function renderFrostPanel(): PanelHandle {
 
     commitResult.innerHTML = '';
     commitResult.appendChild(callout('safe', '✓',
-      `${dealer.n} participants generated nonce pairs. Only the commitment values (D_i, E_i) are public — the nonces themselves are secret.`));
+      `${group.n} participants generated nonce pairs. Only the commitment values (D_i, E_i) are public — the nonces themselves are secret.`));
 
     const firstC = commitmentsMap.get(1)!;
     const row = document.createElement('div');
@@ -456,6 +468,11 @@ export function renderFrostPanel(): PanelHandle {
     row.appendChild(monoBox(hexOf(firstC.D)));
     commitResult.appendChild(row);
 
+  }
+
+  commitBtn.addEventListener('click', () => {
+    if (!dealer) return;
+    generateRoundOne(dealer);
     buildSignerGrid();
 
     unlockStep(step3);
@@ -467,7 +484,7 @@ export function renderFrostPanel(): PanelHandle {
   signBtn.addEventListener('click', () => {
     if (!dealer) return;
 
-    const msg = msgInput.value.trim();
+    const msg = msgInput.value;
     signErr.style.display = 'none';
     if (!msg) {
       signErr.innerHTML = '';
@@ -477,7 +494,7 @@ export function renderFrostPanel(): PanelHandle {
     }
     const msgBytes = te.encode(msg);
 
-    const k = getK();
+    const k = dealer.k;
     const signerIndices = [...selectedSigners];
     const belowThreshold = signerIndices.length < k;
 
@@ -494,6 +511,9 @@ export function renderFrostPanel(): PanelHandle {
       // The identical Round 2 path whatever the signer count. Below k the
       // Lagrange coefficients interpolate the wrong set, so the aggregate does
       // not correspond to the group secret — and the verifier says so.
+      // RFC 9591 §5.1: a Round 1 nonce pair can serve exactly one signing attempt.
+      // Retrying with another quorum or message starts a fresh Round 1.
+      if (noncesMap.size === 0) generateRoundOne(dealer);
       const attempt = signWithSubset(dealer, signerIndices, noncesMap, commitmentsMap, msgBytes);
 
       // Show the partials combining into the aggregate before the verdict.
@@ -543,6 +563,8 @@ export function renderFrostPanel(): PanelHandle {
     } catch (e) {
       signResult.innerHTML = '';
       signResult.appendChild(callout('danger', '✗', `Signing error: ${e}`));
+    } finally {
+      noncesMap.clear();
     }
   });
 
@@ -566,9 +588,14 @@ export function renderFrostPanel(): PanelHandle {
     attackResult.innerHTML = '';
     attackResult.style.display = 'none';
     signBtn.disabled = true;
+    lockStep(step2);
+    lockStep(step3);
     badge.setState('safe');
     notify('safe');
   }
+
+  nInput.addEventListener('input', reset);
+  kInput.addEventListener('input', reset);
 
   async function runAll() {
     reset();

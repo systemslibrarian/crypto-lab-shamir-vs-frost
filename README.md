@@ -6,10 +6,14 @@ Threshold Lab is a side-by-side interactive browser demo comparing Shamir's Secr
 
 The demo is built to teach both mechanisms, not just assert them:
 
-- **Shamir "why exactly _k_?" interpolation view.** As you select shares, a live view fans out infinitely many degree-(_k_−1) curves through _k_−1 points (the secret at _x_=0 could be anything → perfect secrecy), then snaps to the single curve that fits once you reach _k_ points (the secret is pinned down). The curves are real polynomials evaluated over the reals — an honest illustration of the Lagrange-interpolation theorem that governs the GF(256) implementation, kept separate from the actual share bytes shown alongside.
+- **Shamir "why exactly _k_?" interpolation view.** As you select shares, a live view fans out infinitely many curves of degree at most _k_−1 in the real-number illustration through _k_−1 points (the secret at _x_=0 could be anything → perfect secrecy), then snaps to the single curve that fits once you reach _k_ points (the secret is pinned down). The curves are real polynomials evaluated over the reals — an honest illustration of the Lagrange-interpolation theorem that governs the GF(256) implementation, kept separate from the actual share bytes shown alongside.
 - **FROST aggregation view.** On Sign, each selected participant emits a partial-signature chip _z_i_ computed from only their own share, and a running sum accumulates them into the single 64-byte aggregate — making "_k_ partials add up, no share ever meets another, the key is never assembled" visible rather than a black-box "valid" badge.
 - **Inline glossary.** First uses of _threshold (k of n)_, _nonce_, _commitment_, _hiding nonce_, _Lagrange coefficient_, _binding factor_, _partial signature_, and _DKG_ carry dotted-underline tooltips (hover/focus/tap) so the deeper layers don't assume vocabulary the top-level story hasn't introduced.
 - **Progressive disclosure.** The interactive head-to-head comes first; the full seven-dimension comparison table follows it, collapsed to the three load-bearing rows with a "show all dimensions" expander — the summary you read _after_ building intuition, not the opening wall of jargon.
+
+With threshold three over GF(256), the shares at indices 1 and 2 can have byte values `46` and `4f` (hex). A straight-line interpolation of those two points gives `41`. A third share at index 3 with value `48` confirms `41`; a third value of `4a` gives `43`. All 256 secret bytes are possible before the third share arrives. Only the dealer’s retained original lets the demonstration label a candidate as a match.
+
+Each FROST signing attempt consumes its Round 1 nonces, including an attempt that the verifier rejects. Signing again creates fresh public commitments for the new attempt. The dealer is trusted during setup. The threshold applies to subsequent signing.
 
 ## When to Use It
 

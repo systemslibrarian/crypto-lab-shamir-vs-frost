@@ -57,6 +57,26 @@ test('FROST rejects a k-1 signature and accepts the k-th, on the same code path'
   await expect(frost(page).locator('.agg-chip')).toHaveCount(3);
 });
 
+test('repeated quorum signing uses fresh public commitments and clears obsolete message evidence', async ({ page }) => {
+  await distributeAndCommit(page);
+  const panel = frost(page);
+  for (let i = 0; i < 3; i++) await signerCards(page).nth(i).click();
+  const commitment = panel.getByText('Participant 1 commitment D', { exact: false }).locator('..').locator('.mono-box span');
+  const before = await commitment.textContent();
+  const sign = panel.getByRole('button', { name: 'Sign', exact: true });
+  const result = panel.locator('div[role="status"][aria-live="polite"]').first();
+  await sign.click();
+  await expect(result).toContainText('Signature valid');
+  await expect(commitment).toHaveText(before!);
+  await sign.click();
+  await expect(result).toContainText('Signature valid');
+  await expect(commitment).not.toHaveText(before!);
+  await panel.locator('input[type="text"]').fill('  classroom message  ');
+  await expect(result).toBeEmpty();
+  await sign.click();
+  await expect(result).toContainText('Signature valid');
+});
+
 test('the aggregate is the running sum of k partial signatures', async ({ page }) => {
   await distributeAndCommit(page);
   for (let i = 0; i < 3; i++) await signerCards(page).nth(i).click();
@@ -99,32 +119,42 @@ test('the key badges report what each protocol actually did', async ({ page }) =
   await expect(page.locator('.vc-frost')).toContainText('NO — never assembled');
 });
 
-test('Shamir reconstruction below k returns the wrong bytes and says so', async ({ page }) => {
-  await shamir(page).getByRole('button', { name: 'Split Secret' }).click();
-  const shareCards = shamir(page).locator('.share-card');
-  await shareCards.nth(0).click();
-  await shareCards.nth(1).click();
-
-  const reconstructBtn = shamir(page).locator('button', { hasText: 'Reconstruct' });
-  await expect(reconstructBtn).toBeEnabled();
-  await expect(reconstructBtn).toHaveText('Reconstruct anyway (2 of k=3)');
-  await reconstructBtn.click();
-
-  const result = shamir(page).locator('div[role="status"][aria-live="polite"]').first();
-  await expect(result).toContainText('Interpolation ran on 2 of k=3 points');
-  await expect(result).toContainText('no match');
-  await expect(result).toContainText('What 2 shares actually interpolate to');
-  // Nothing was recovered, so nothing entered memory.
-  await expect(shamir(page).locator('.key-badge')).toHaveText('○ Awaiting operation');
-  await expect(page.locator('.vc-shamir')).toContainText('NO — never assembled');
-
-  // The third share flips it.
-  await shareCards.nth(2).click();
-  await expect(reconstructBtn).toHaveText('Reconstruct');
-  await reconstructBtn.click();
-  await expect(result).toContainText('byte-for-byte match');
-  await expect(result).toContainText('correct horse battery');
-  await expect(shamir(page).locator('.key-badge')).toHaveText('⚠ Private key in memory');
+test('the same two shares can match by chance or miss, and only the third resolves the secret', async ({ page }) => {
+  const panel = shamir(page);
+  for (const { secret, coeffs, verdict } of [
+    { secret: 'A', coeffs: [7, 0], verdict: 'matches by chance' },
+    { secret: 'C', coeffs: [4, 1], verdict: 'no match' },
+  ]) {
+    await page.locator('#shamir-secret').fill(secret);
+    // Fix the two classroom polynomial coefficients for this one click only.
+    await panel.getByRole('button', { name: 'Split Secret' }).evaluate((button, coefficients) => {
+      const rng = crypto.getRandomValues;
+      crypto.getRandomValues = function<T extends ArrayBufferView | null>(buf: T): T {
+        if (buf instanceof Uint8Array && buf.length === 2) { buf.set(coefficients); return buf; }
+        return rng.call(crypto, buf) as T;
+      };
+      try { (button as HTMLButtonElement).click(); } finally { crypto.getRandomValues = rng; }
+    }, coeffs);
+    const cards = panel.locator('.share-card');
+    await expect(cards.nth(0)).toContainText('46');
+    await expect(cards.nth(1)).toContainText('4f');
+    await cards.nth(0).click();
+    await cards.nth(1).click();
+    const reconstruct = panel.getByRole('button', { name: /Reconstruct/ });
+    await expect(reconstruct).toHaveText('Reconstruct anyway (2 of k=3)');
+    await reconstruct.click();
+    const result = panel.locator('div[role="status"][aria-live="polite"]').first();
+    await expect(result).toContainText(verdict);
+    await expect(result).toContainText('What 2 shares actually interpolate to');
+    await expect(result.locator('.mono-box span')).toHaveText('41');
+    await expect(panel.locator('.key-badge')).toHaveText('○ Awaiting operation');
+    await expect(page.locator('.vc-shamir')).toContainText('NO — never assembled');
+    await cards.nth(2).click();
+    await reconstruct.click();
+    await expect(result).toContainText('byte-for-byte match');
+    await expect(result.locator('.mono-box span')).toHaveText(secret);
+    await expect(panel.locator('.key-badge')).toHaveText('⚠ Private key in memory');
+  }
 });
 
 test('the compromise control makes the attacker actually try to sign', async ({ page }) => {
